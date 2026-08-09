@@ -75,6 +75,12 @@ h3 {
     gap: 6px;
 }
 
+.rail-nav-bottom {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid #345845;
+}
+
 .rail-link {
     text-align: left;
     border: 1px solid transparent;
@@ -97,6 +103,10 @@ h3 {
     display: grid;
     grid-template-rows: auto 1fr;
     min-width: 0;
+}
+
+.hidden {
+    display: none !important;
 }
 
 .today-top {
@@ -450,6 +460,7 @@ label {
     letter-spacing: 0.2px;
 }
 
+input,
 select,
 textarea {
     width: 100%;
@@ -466,6 +477,7 @@ textarea {
     resize: vertical;
 }
 
+input:focus,
 select:focus,
 textarea:focus {
     outline: none;
@@ -477,6 +489,161 @@ textarea:focus {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+}
+
+.setup-screen {
+    min-width: 0;
+    overflow: auto;
+    padding: 12px 14px 16px;
+}
+
+.setup-header {
+    margin-bottom: 12px;
+}
+
+.setup-header h2 {
+    font-size: 24px;
+    margin-bottom: 2px;
+}
+
+.setup-header p {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.setup-context {
+    margin-top: 6px;
+}
+
+.setup-section {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.setup-section-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-family: "Source Serif Pro", Georgia, "Times New Roman", serif;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 6px;
+}
+
+.setup-indicator {
+    font-family: "Inter", "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    color: var(--muted);
+}
+
+.setup-section-body {
+    margin-top: 6px;
+}
+
+.setup-subsection h4 {
+    font-size: 13px;
+    margin: 8px 0 6px;
+}
+
+.setup-grid {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.setup-grid-1 { grid-template-columns: 1fr; }
+.setup-grid-2 { grid-template-columns: 1fr auto; }
+.setup-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.setup-grid-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
+
+.check-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.check-group label {
+    margin: 0;
+    text-transform: none;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.check-group input {
+    width: auto;
+}
+
+.setup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.setup-table td,
+.setup-table th {
+    border-bottom: 1px solid #edf0ed;
+    padding: 6px 4px;
+    text-align: left;
+}
+
+.setup-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.setup-actions button,
+.setup-section button,
+.placeholder-btn {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.setup-actions button:hover,
+.setup-section button:hover,
+.placeholder-btn:hover {
+    background: #f2f5f2;
+}
+
+.placeholder-btn {
+    color: var(--muted);
+}
+
+.exception-item,
+.roster-item,
+.project-item {
+    border: 1px solid #edf0ed;
+    border-radius: 5px;
+    padding: 6px;
+    margin-bottom: 6px;
+    display: grid;
+    gap: 6px;
+}
+
+.project-item.current-project {
+    border-color: #9fb3a4;
+    background: #f4f8f5;
+}
+
+.exception-item .setup-grid,
+.roster-item .setup-grid,
+.project-item .setup-grid {
+    margin-bottom: 0;
 }
 
 @media (max-width: 1180px) {
@@ -529,5 +696,10 @@ textarea:focus {
 
     .date-context {
         white-space: normal;
+    }
+
+    .setup-grid-3,
+    .setup-grid-5 {
+        grid-template-columns: 1fr;
     }
 }

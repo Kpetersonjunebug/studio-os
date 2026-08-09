@@ -14,16 +14,19 @@
                 <p>V2.5</p>
             </div>
             <nav class="rail-nav">
-                <button class="rail-link active" type="button">Today</button>
+                <button class="rail-link active" id="navToday" type="button">Today</button>
                 <button class="rail-link" type="button">Follow-ups</button>
                 <button class="rail-link" type="button">Projects</button>
                 <button class="rail-link" type="button">Students</button>
                 <button class="rail-link" type="button">Studio Library</button>
                 <button class="rail-link" type="button">Record</button>
             </nav>
+            <nav class="rail-nav rail-nav-bottom">
+                <button class="rail-link" id="navSetup" type="button">Setup</button>
+            </nav>
         </aside>
 
-        <main class="today-screen">
+        <main class="today-screen" id="todayScreen">
             <header class="today-top">
                 <section class="today-controls">
                     <div class="class-selector">
@@ -111,6 +114,147 @@
                         <button id="resetAllDataBtn" type="button">Reset All Pilot Data</button>
                     </div>
                 </details>
+            </section>
+        </main>
+
+        <main class="setup-screen hidden" id="setupScreen">
+            <header class="setup-header">
+                <h2>Setup</h2>
+                <p>Configure pilot classes, roster, calendar, syllabus, and projects.</p>
+                <p class="setup-context">Editing: <strong id="setupEditingContext">DSN 100 · Foundations</strong></p>
+            </header>
+
+            <section class="setup-section" data-setup-section="calendar">
+                <button class="setup-section-header" id="setupHeaderCalendar" type="button" aria-expanded="false">
+                    <span>Academic Calendar</span><span class="setup-indicator">+</span>
+                </button>
+                <div class="setup-section-body hidden" id="setupBodyCalendar">
+                    <div class="setup-grid setup-grid-3">
+                    <div>
+                        <label for="semesterName">Semester Name</label>
+                        <input id="semesterName" type="text">
+                    </div>
+                    <div>
+                        <label for="semesterStart">Semester Start Date</label>
+                        <input id="semesterStart" type="date">
+                    </div>
+                    <div>
+                        <label for="semesterEnd">Semester End Date</label>
+                        <input id="semesterEnd" type="date">
+                    </div>
+                </div>
+                    <div class="setup-subsection">
+                    <h4>Calendar Exceptions</h4>
+                    <div id="calendarExceptionsList"></div>
+                    <div class="setup-grid setup-grid-3">
+                        <div><input id="newExceptionDate" type="date"></div>
+                        <div>
+                            <select id="newExceptionType">
+                                <option value="No Class">No Class</option>
+                                <option value="University Holiday">University Holiday</option>
+                                <option value="Break">Break</option>
+                            </select>
+                        </div>
+                        <div><input id="newExceptionDescription" type="text" placeholder="Short description"></div>
+                    </div>
+                    <button id="addExceptionBtn" type="button">Add Exception</button>
+                </div>
+                </div>
+            </section>
+
+            <section class="setup-section" data-setup-section="classes">
+                <button class="setup-section-header" id="setupHeaderClasses" type="button" aria-expanded="true">
+                    <span>Classes</span><span class="setup-indicator">−</span>
+                </button>
+                <div class="setup-section-body" id="setupBodyClasses">
+                    <div class="setup-grid setup-grid-3 class-row">
+                    <div>
+                        <label for="setupClassSelect">Select Class</label>
+                        <select id="setupClassSelect"></select>
+                    </div>
+                    <div class="class-actions">
+                        <button id="addClassBtn" type="button">Add New Class</button>
+                    </div>
+                </div>
+                    <div class="setup-grid setup-grid-5">
+                    <div>
+                        <label for="setupCourseCode">Course Code</label>
+                        <input id="setupCourseCode" type="text">
+                    </div>
+                    <div>
+                        <label for="setupCourseName">Course Name</label>
+                        <input id="setupCourseName" type="text">
+                    </div>
+                    <div>
+                        <label for="setupClassStart">Semester Start Date</label>
+                        <input id="setupClassStart" type="date">
+                    </div>
+                    <div>
+                        <label for="setupClassEnd">Semester End Date</label>
+                        <input id="setupClassEnd" type="date">
+                    </div>
+                    <div>
+                        <label>Meeting Days</label>
+                        <div id="meetingDaysGroup" class="check-group"></div>
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <section class="setup-section" data-setup-section="roster">
+                <button class="setup-section-header" id="setupHeaderRoster" type="button" aria-expanded="false">
+                    <span>Roster</span><span class="setup-indicator">+</span>
+                </button>
+                <div class="setup-section-body hidden" id="setupBodyRoster">
+                    <div id="rosterList"></div>
+                    <div class="setup-grid setup-grid-2">
+                    <div>
+                        <input id="newStudentName" type="text" placeholder="Student name">
+                    </div>
+                    <div>
+                        <button id="addStudentBtn" type="button">Add Student</button>
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <section class="setup-section" data-setup-section="syllabus">
+                <button class="setup-section-header" id="setupHeaderSyllabus" type="button" aria-expanded="false">
+                    <span>Syllabus</span><span class="setup-indicator">+</span>
+                </button>
+                <div class="setup-section-body hidden" id="setupBodySyllabus">
+                    <div class="setup-grid setup-grid-1">
+                    <div>
+                        <label for="syllabusTitle">Syllabus Title</label>
+                        <input id="syllabusTitle" type="text">
+                    </div>
+                    <div>
+                        <label for="syllabusNotes">Syllabus Notes / Content</label>
+                        <textarea id="syllabusNotes"></textarea>
+                    </div>
+                </div>
+                    <button type="button" class="placeholder-btn">Attach Syllabus — Future Feature</button>
+                </div>
+            </section>
+
+            <section class="setup-section" data-setup-section="projects">
+                <button class="setup-section-header" id="setupHeaderProjects" type="button" aria-expanded="false">
+                    <span>Project Briefs</span><span class="setup-indicator">+</span>
+                </button>
+                <div class="setup-section-body hidden" id="setupBodyProjects">
+                    <div id="projectsList"></div>
+                    <div class="setup-grid setup-grid-5">
+                    <div><input id="projectName" type="text" placeholder="Project name"></div>
+                    <div><input id="projectStart" type="date"></div>
+                    <div><input id="projectDue" type="date"></div>
+                    <div><input id="projectMilestoneInput" type="text" placeholder="Next milestone"></div>
+                    <div><button id="addProjectBtn" type="button">Add Project</button></div>
+                </div>
+                    <div class="setup-grid setup-grid-1">
+                    <div><textarea id="projectNotes" placeholder="Project brief / notes"></textarea></div>
+                </div>
+                    <button type="button" class="placeholder-btn">Attach Project Brief — Future Feature</button>
+                </div>
             </section>
         </main>
     </div>

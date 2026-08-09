@@ -1,221 +1,333 @@
-// Studio OS - Main Application Logic
-
 class StudioOSApp {
     constructor() {
+        this.storageKey = "studioOS_students";
         this.students = [];
         this.selectedStudentId = null;
-        this.storageKey = 'studioOS_students';
         this.init();
     }
 
     init() {
         this.loadStudents();
-        this.renderStudentList();
-        this.updateFollowUpsStat();
+        if (!this.selectedStudentId && this.students.length > 0) {
+            this.selectedStudentId = this.students[0].id;
+        }
+        this.renderAll();
     }
 
     loadStudents() {
-        const stored = localStorage.getItem(this.storageKey);
-        if (stored) {
-            try {
-                this.students = JSON.parse(stored);
-            } catch (e) {
-                console.error('Error loading stored students:', e);
-                this.students = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
-            }
-        } else {
-            this.students = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
+        const raw = localStorage.getItem(this.storageKey);
+        if (!raw) {
+            this.students = this.createSeedStudents();
+            this.saveStudents();
+            return;
         }
+
+        try {
+            const parsed = JSON.parse(raw);
+            this.students = parsed.map((student, i) => this.normalizeStudent(student, i));
+        } catch (err) {
+            console.error("Failed to parse stored data, using defaults.", err);
+            this.students = this.createSeedStudents();
+            this.saveStudents();
+        }
+    }
+
+    createSeedStudents() {
+        const seeded = JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
+        const byName = Object.fromEntries(seeded.map((s) => [s.name, s]));
+
+        byName["Maya Chen"].overallStatus = "Needs Help";
+        byName["Maya Chen"].followUp = "Next Class";
+        byName["Maya Chen"].projectStage = "Planning";
+        byName["Maya Chen"].classNote = "Revision needed on mural composition.";
+        byName["Maya Chen"].followUpNote = "Check alignment studies next class.";
+
+        byName["Jordan Lee"].overallStatus = "Needs Help";
+        byName["Jordan Lee"].attendance = "Tardy";
+        byName["Jordan Lee"].followUp = "Next Class";
+        byName["Jordan Lee"].projectStage = "Ideation";
+        byName["Jordan Lee"].classNote = "Still searching for clear visual direction.";
+
+        byName["Noah Williams"].followUp = "Next Class";
+        byName["Noah Williams"].attendance = "Absent";
+        byName["Noah Williams"].overallStatus = "Developing";
+        byName["Noah Williams"].classNote = "Needs make-up critique notes.";
+
+        return seeded;
+    }
+
+    normalizeStudent(student, fallbackIndex) {
+        const base = createDefaultStudent({
+            id: student.id ?? fallbackIndex + 1,
+            name: student.name ?? `Student ${fallbackIndex + 1}`,
+        });
+        return {
+            ...base,
+            ...student,
+            evaluation: {
+                ...base.evaluation,
+                ...(student.evaluation || {}),
+            },
+        };
     }
 
     saveStudents() {
         localStorage.setItem(this.storageKey, JSON.stringify(this.students));
     }
 
-    renderStudentList() {
-        const studentList = document.getElementById('studentList');
-        studentList.innerHTML = '';
+    renderAll() {
+        this.renderSummary();
+        this.renderFollowUpsDue();
+        this.renderStudentTable();
+        this.renderStudentPanel();
+    }
 
-        this.students.forEach(student => {
-            const item = document.createElement('div');
-            item.className = 'student-item';
-            if (student.id === this.selectedStudentId) {
-                item.classList.add('selected');
-            }
+    getCounts() {
+        const total = this.students.length;
+        const needHelp = this.students.filter((s) => s.overallStatus === "Needs Help").length;
+        const followUps = this.students.filter((s) => s.followUp === "Next Class").length;
+        const atRisk = this.students.filter(
+            (s) => s.attendance !== "Present" && (s.overallStatus === "Needs Help" || s.followUp === "Next Class")
+        ).length;
+        return { total, needHelp, atRisk, followUps };
+    }
 
-            // Determine indicator color
-            let indicatorClass = '';
-            if (student.followUp === 'Next Class') {
-                indicatorClass = 'follow-up';
-            } else if (student.overallStatus === 'Needs Help') {
-                indicatorClass = 'needs-help';
-            }
+    renderSummary() {
+        const counts = this.getCounts();
+        document.getElementById("metricStudents").textContent = String(counts.total);
+        document.getElementById("metricNeedHelp").textContent = String(counts.needHelp);
+        document.getElementById("metricAtRisk").textContent = String(counts.atRisk);
+        document.getElementById("metricFollowUps").textContent = String(counts.followUps);
+    }
 
-            item.innerHTML = `
-                <span class="student-item-name">${student.name}</span>
-                ${indicatorClass ? `<div class="student-item-indicator ${indicatorClass}"></div>` : ''}
+    renderFollowUpsDue() {
+        const host = document.getElementById("followUpsDue");
+        const due = this.students.filter((s) => s.followUp === "Next Class");
+        host.innerHTML = "";
+
+        if (due.length === 0) {
+            host.innerHTML = '<span class="project-subtitle">No follow-ups due today.</span>';
+            return;
+        }
+
+        due.forEach((student) => {
+            const btn = document.createElement("button");
+            btn.className = "chip-btn";
+            btn.type = "button";
+            btn.textContent = student.name;
+            btn.addEventListener("click", () => this.selectStudent(student.id));
+            host.appendChild(btn);
+        });
+    }
+
+    statusTagClass(status) {
+        if (status === "Strong") return "tag tag-strong";
+        if (status === "Needs Help") return "tag tag-needs-help";
+        return "tag tag-developing";
+    }
+
+    followUpTagClass(status) {
+        if (status === "Next Class") return "tag tag-followup";
+        if (status === "Complete") return "tag tag-strong";
+        return "tag tag-developing";
+    }
+
+    attendanceTagClass(attendance) {
+        if (attendance === "Absent") return "tag tag-absent";
+        if (attendance === "Tardy") return "tag tag-tardy";
+        return "tag tag-strong";
+    }
+
+    renderStudentTable() {
+        const tbody = document.getElementById("studentTableBody");
+        tbody.innerHTML = "";
+
+        this.students.forEach((student) => {
+            const tr = document.createElement("tr");
+            tr.className = "student-row";
+            if (student.id === this.selectedStudentId) tr.classList.add("selected");
+
+            const note = student.classNote && student.classNote.trim().length > 0 ? student.classNote.trim() : "—";
+
+            tr.innerHTML = `
+                <td><strong>${student.name}</strong></td>
+                <td><span class="${this.attendanceTagClass(student.attendance)}">${student.attendance}</span></td>
+                <td><span class="${this.statusTagClass(student.overallStatus)}">${student.overallStatus}</span></td>
+                <td>${student.projectStage}</td>
+                <td><span class="${this.statusTagClass(student.overallStatus)}">${student.overallStatus}</span></td>
+                <td class="last-note">${this.escapeHtml(note)}</td>
+                <td><span class="${this.followUpTagClass(student.followUp)}">${student.followUp}</span></td>
             `;
 
-            item.addEventListener('click', () => this.selectStudent(student.id));
-            studentList.appendChild(item);
+            tr.addEventListener("click", () => this.selectStudent(student.id));
+            tbody.appendChild(tr);
         });
     }
 
     selectStudent(studentId) {
         this.selectedStudentId = studentId;
-        this.renderStudentList();
-        this.renderDetailPanel();
+        this.renderStudentTable();
+        this.renderStudentPanel();
     }
 
-    renderDetailPanel() {
-        const panel = document.getElementById('detailPanel');
+    escapeHtml(text) {
+        return text
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+    }
 
-        if (!this.selectedStudentId) {
-            panel.innerHTML = `
-                <div class="panel-placeholder">
-                    <p>Select a student to view details</p>
-                </div>
-            `;
+    currentStudent() {
+        return this.students.find((s) => s.id === this.selectedStudentId) || null;
+    }
+
+    countAbsences(student) {
+        return student.attendance === "Absent" ? 1 : 0;
+    }
+
+    renderStudentPanel() {
+        const panel = document.getElementById("studentPanel");
+        const student = this.currentStudent();
+        if (!student) {
+            panel.innerHTML = '<div class="panel-placeholder">Select a student from the table.</div>';
             return;
         }
 
-        const student = this.students.find(s => s.id === this.selectedStudentId);
-        if (!student) return;
-
-        const statusBadgeClass = student.followUp === 'Next Class' ? 'follow-up' :
-                                 student.overallStatus === 'Needs Help' ? 'needs-help' : 'on-track';
+        const lastNote = student.classNote && student.classNote.trim().length > 0 ? student.classNote.trim() : "No note";
+        const absences = this.countAbsences(student);
 
         panel.innerHTML = `
-            <div class="detail-header">
-                <div class="detail-name">${student.name}</div>
-                <div class="detail-meta">
-                    <span class="status-badge ${statusBadgeClass}">${student.followUp === 'Next Class' ? '⚠ Follow-up' : student.overallStatus}</span>
+            <div class="panel-header">
+                <h3>${student.name}</h3>
+                <div class="context-grid">
+                    <div>Current standing: <strong>${student.overallStatus}</strong></div>
+                    <div>Absences: <strong>${absences}</strong></div>
+                    <div>Project stage: <strong>${student.projectStage}</strong></div>
+                    <div>Follow-up: <strong>${student.followUp}</strong></div>
+                    <div style="grid-column: 1 / -1;">Last note: <strong>${this.escapeHtml(lastNote)}</strong></div>
                 </div>
             </div>
 
-            <div class="form-section">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Attendance</label>
-                        <select class="form-select" id="attendance" data-field="attendance">
-                            ${ATTENDANCE_OPTIONS.map(opt => `<option value="${opt}" ${student.attendance === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+            <div class="form-stack">
+                <div class="row-two">
+                    <div>
+                        <label for="attendance">Attendance</label>
+                        <select id="attendance" data-field="attendance">
+                            ${this.options(ATTENDANCE_OPTIONS, student.attendance)}
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Project Stage</label>
-                        <select class="form-select" id="projectStage" data-field="projectStage">
-                            ${PROJECT_STAGES.map(opt => `<option value="${opt}" ${student.projectStage === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Overall Status</label>
-                        <select class="form-select" id="overallStatus" data-field="overallStatus">
-                            ${OVERALL_STATUS.map(opt => `<option value="${opt}" ${student.overallStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Follow-up</label>
-                        <select class="form-select" id="followUp" data-field="followUp">
-                            ${FOLLOW_UP_STATUS.map(opt => `<option value="${opt}" ${student.followUp === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    <div>
+                        <label for="overallStatus">Overall Status</label>
+                        <select id="overallStatus" data-field="overallStatus">
+                            ${this.options(OVERALL_STATUS, student.overallStatus)}
                         </select>
                     </div>
                 </div>
-            </div>
 
-            <div class="form-section">
-                <div class="form-group form-row full">
-                    <label class="form-label">Class Note</label>
-                    <textarea class="form-input" id="classNote" data-field="classNote" placeholder="Quick note about student progress...">${student.classNote}</textarea>
+                <div>
+                    <label for="projectStage">Project Stage</label>
+                    <select id="projectStage" data-field="projectStage">
+                        ${this.options(PROJECT_STAGES, student.projectStage)}
+                    </select>
                 </div>
-                <div class="form-group form-row full">
-                    <label class="form-label">Follow-up Note</label>
-                    <textarea class="form-input" id="followUpNote" data-field="followUpNote" placeholder="What do they need to work on?">${student.followUpNote}</textarea>
+
+                <div>
+                    <label for="classNote">Class Note</label>
+                    <textarea id="classNote" data-field="classNote">${this.escapeHtml(student.classNote || "")}</textarea>
                 </div>
-            </div>
 
-            <div class="section-divider"></div>
+                <div>
+                    <label for="followUp">Follow-up</label>
+                    <select id="followUp" data-field="followUp">
+                        ${this.options(FOLLOW_UP_STATUS, student.followUp)}
+                    </select>
+                </div>
 
-            <div class="form-section">
-                <div class="form-label" style="margin-bottom: 10px;">Evaluation</div>
+                <div>
+                    <label for="followUpNote">Follow-up Note</label>
+                    <textarea id="followUpNote" data-field="followUpNote">${this.escapeHtml(student.followUpNote || "")}</textarea>
+                </div>
+
                 <div class="evaluation-grid">
-                    <div class="form-group evaluation-item">
-                        <label class="form-label" style="text-transform: none; font-weight: 500; font-size: 11px;">Concept</label>
-                        <select class="form-select" id="evalConcept" data-field="evaluation.concept">
-                            ${EVALUATION_LEVELS.map(opt => `<option value="${opt}" ${student.evaluation.concept === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    <div>
+                        <label for="evalConcept">Concept</label>
+                        <select id="evalConcept" data-field="evaluation.concept">
+                            ${this.options(EVALUATION_LEVELS, student.evaluation.concept)}
                         </select>
                     </div>
-                    <div class="form-group evaluation-item">
-                        <label class="form-label" style="text-transform: none; font-weight: 500; font-size: 11px;">Craft / Execution</label>
-                        <select class="form-select" id="evalCraft" data-field="evaluation.craft">
-                            ${EVALUATION_LEVELS.map(opt => `<option value="${opt}" ${student.evaluation.craft === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    <div>
+                        <label for="evalCraft">Craft / Execution</label>
+                        <select id="evalCraft" data-field="evaluation.craft">
+                            ${this.options(EVALUATION_LEVELS, student.evaluation.craft)}
                         </select>
                     </div>
-                    <div class="form-group evaluation-item">
-                        <label class="form-label" style="text-transform: none; font-weight: 500; font-size: 11px;">Presentation / Graphics</label>
-                        <select class="form-select" id="evalPresentation" data-field="evaluation.presentation">
-                            ${EVALUATION_LEVELS.map(opt => `<option value="${opt}" ${student.evaluation.presentation === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    <div>
+                        <label for="evalPresentation">Presentation / Graphics</label>
+                        <select id="evalPresentation" data-field="evaluation.presentation">
+                            ${this.options(EVALUATION_LEVELS, student.evaluation.presentation)}
                         </select>
                     </div>
-                    <div class="form-group evaluation-item">
-                        <label class="form-label" style="text-transform: none; font-weight: 500; font-size: 11px;">Technical Deliverables</label>
-                        <select class="form-select" id="evalTechnical" data-field="evaluation.technical">
-                            ${EVALUATION_LEVELS.map(opt => `<option value="${opt}" ${student.evaluation.technical === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    <div>
+                        <label for="evalTechnical">Technical Deliverables</label>
+                        <select id="evalTechnical" data-field="evaluation.technical">
+                            ${this.options(EVALUATION_LEVELS, student.evaluation.technical)}
                         </select>
                     </div>
                 </div>
-                <div class="form-group form-row full" style="margin-top: 12px;">
-                    <label class="form-label">Evaluation Note</label>
-                    <textarea class="form-input" id="evaluationNote" data-field="evaluationNote" placeholder="Feedback and observations...">${student.evaluationNote}</textarea>
+
+                <div>
+                    <label for="evaluationNote">Evaluation Note</label>
+                    <textarea id="evaluationNote" data-field="evaluationNote">${this.escapeHtml(student.evaluationNote || "")}</textarea>
                 </div>
             </div>
         `;
 
-        // Attach event listeners to form elements
-        this.attachFormListeners();
+        this.bindPanelEvents();
     }
 
-    attachFormListeners() {
-        const formElements = document.querySelectorAll('[data-field]');
-        formElements.forEach(element => {
-            element.addEventListener('change', (e) => this.updateStudentField(e.target));
-            element.addEventListener('input', (e) => this.updateStudentField(e.target));
+    options(options, selected) {
+        return options
+            .map((opt) => `<option value="${opt}" ${opt === selected ? "selected" : ""}>${opt}</option>`)
+            .join("");
+    }
+
+    bindPanelEvents() {
+        const panel = document.getElementById("studentPanel");
+        panel.querySelectorAll("select[data-field]").forEach((el) => {
+            el.addEventListener("change", (event) => {
+                this.updateField(event.target.getAttribute("data-field"), event.target.value);
+                this.renderAll();
+            });
+        });
+
+        panel.querySelectorAll("textarea[data-field]").forEach((el) => {
+            el.addEventListener("input", (event) => {
+                this.updateField(event.target.getAttribute("data-field"), event.target.value, false);
+            });
+            el.addEventListener("blur", () => {
+                this.renderAll();
+            });
         });
     }
 
-    updateStudentField(element) {
-        const field = element.getAttribute('data-field');
-        const value = element.value;
-
-        const student = this.students.find(s => s.id === this.selectedStudentId);
+    updateField(path, value, rerender = true) {
+        const student = this.currentStudent();
         if (!student) return;
 
-        // Handle nested fields (e.g., evaluation.concept)
-        if (field.includes('.')) {
-            const parts = field.split('.');
-            student[parts[0]][parts[1]] = value;
+        if (path.includes(".")) {
+            const [a, b] = path.split(".");
+            student[a][b] = value;
         } else {
-            student[field] = value;
+            student[path] = value;
         }
 
         this.saveStudents();
-        this.renderStudentList();
-        this.updateFollowUpsStat();
-    }
-
-    updateFollowUpsStat() {
-        const followUpsCount = this.students.filter(s => s.followUp === 'Next Class').length;
-        const stat = document.getElementById('followUpsStat');
-        if (stat) {
-            stat.textContent = followUpsCount > 0 ? `${followUpsCount} follow-up(s) due today` : 'Follow-ups due today';
-        }
+        if (rerender) this.renderAll();
     }
 }
 
-// Initialize app when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new StudioOSApp();
-    console.log('Studio OS initialized successfully');
+document.addEventListener("DOMContentLoaded", () => {
+    window.studioOSApp = new StudioOSApp();
 });
-

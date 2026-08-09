@@ -3,55 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio OS - Instructor Dashboard</title>
+    <title>Studio OS V2.5 - Today</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="header-left">
-                    <h1>Studio OS</h1>
-                    <p class="subtitle">DSN 100 · Foundations</p>
-                </div>
-                <div class="header-center">
-                    <p class="date-info" id="dateInfo">Friday, Aug. 28 · Week 2 · Class 5</p>
-                </div>
-                <div class="header-right">
-                    <div class="project-info">
-                        <p><strong>Current Project:</strong> Tape Mural</p>
-                        <p><strong>Next Milestone:</strong> Reflection due Monday</p>
-                    </div>
-                </div>
+    <div class="app-shell">
+        <aside class="nav-rail" aria-label="Studio OS Navigation">
+            <div class="rail-brand">
+                <h1>Studio OS</h1>
+                <p>V2.5</p>
             </div>
-            <div class="header-stats">
-                <span class="stat">18 Students</span>
-                <span class="stat separator">·</span>
-                <span class="stat" id="followUpsStat">Follow-ups due today</span>
-            </div>
-        </header>
+            <nav class="rail-nav">
+                <button class="rail-link active" type="button">Today</button>
+                <button class="rail-link" type="button">Follow-ups</button>
+                <button class="rail-link" type="button">Projects</button>
+                <button class="rail-link" type="button">Students</button>
+                <button class="rail-link" type="button">Studio Library</button>
+                <button class="rail-link" type="button">Record</button>
+            </nav>
+        </aside>
 
-        <div class="main-layout">
-            <!-- Left Sidebar - Student List -->
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <h2>Students</h2>
-                </div>
-                <div class="student-list" id="studentList">
-                    <!-- Students will be populated here -->
-                </div>
-            </aside>
-
-            <!-- Main Content -->
-            <main class="content">
-                <div class="detail-panel" id="detailPanel">
-                    <div class="panel-placeholder">
-                        <p>Select a student to view details</p>
+        <main class="today-screen">
+            <header class="today-top">
+                <section class="today-summary">
+                    <div class="summary-course">
+                        <h2>DSN 100 · Foundations</h2>
+                        <p>Friday, Aug. 28</p>
+                        <p>Week 2 · Class 5</p>
                     </div>
+                    <div class="summary-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Students</span>
+                            <span class="metric-value" id="metricStudents">18</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Need Help</span>
+                            <span class="metric-value" id="metricNeedHelp">2</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">At Risk</span>
+                            <span class="metric-value" id="metricAtRisk">1</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Follow-ups</span>
+                            <span class="metric-value" id="metricFollowUps">3</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="active-project" aria-label="Active Project">
+                    <div>
+                        <p class="project-title">Tape Mural</p>
+                        <p class="project-subtitle">Current project</p>
+                    </div>
+                    <div class="project-milestone">
+                        <span>Next milestone:</span>
+                        <strong>Reflection due Monday</strong>
+                    </div>
+                </section>
+
+                <section class="followups-due" aria-label="Follow-ups Due Today">
+                    <h3>Follow-ups Due Today</h3>
+                    <div id="followUpsDue" class="followup-chips"></div>
+                </section>
+            </header>
+
+            <section class="today-workspace">
+                <div class="table-wrap">
+                    <table class="student-table" aria-label="Student table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Attendance</th>
+                                <th>Standing</th>
+                                <th>Project Stage</th>
+                                <th>Status</th>
+                                <th>Last Note</th>
+                                <th>Follow-up</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody"></tbody>
+                    </table>
                 </div>
-            </main>
-        </div>
+
+                <aside class="student-panel" id="studentPanel">
+                    <div class="panel-placeholder">Select a student from the table.</div>
+                </aside>
+            </section>
+        </main>
     </div>
 
     <script src="data.js"></script>

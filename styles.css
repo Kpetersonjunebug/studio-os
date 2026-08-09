@@ -105,6 +105,52 @@ h3 {
     background: var(--surface);
 }
 
+.today-controls {
+    display: grid;
+    grid-template-columns: 260px 1fr auto;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 10px;
+}
+
+.class-selector label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.class-selector select {
+    width: 100%;
+}
+
+.date-nav {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.date-nav button {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.date-nav button:hover {
+    background: #f2f5f2;
+}
+
+.date-context {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
 .today-summary {
     display: flex;
     justify-content: space-between;
@@ -315,6 +361,45 @@ h3 {
     overflow: auto;
 }
 
+.experimental-tools {
+    padding: 0 14px 10px;
+}
+
+.experimental-tools details {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fafbfa;
+    padding: 6px 8px;
+    max-width: 430px;
+}
+
+.experimental-tools summary {
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.experimental-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.experimental-actions button {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 5px;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.experimental-actions button:hover {
+    background: #f3f4f3;
+}
+
 .panel-placeholder {
     color: var(--muted);
     font-size: 13px;
@@ -435,5 +520,14 @@ textarea:focus {
 
     .summary-metrics {
         width: 100%;
+    }
+
+    .today-controls {
+        grid-template-columns: 1fr;
+        align-items: start;
+    }
+
+    .date-context {
+        white-space: normal;
     }
 }

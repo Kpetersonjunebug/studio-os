@@ -25,11 +25,24 @@
 
         <main class="today-screen">
             <header class="today-top">
+                <section class="today-controls">
+                    <div class="class-selector">
+                        <label for="classSelect">Class</label>
+                        <select id="classSelect"></select>
+                    </div>
+                    <div class="date-nav" aria-label="Class date navigation">
+                        <button id="prevDateBtn" type="button">Previous class</button>
+                        <button id="todayDateBtn" type="button">Current/today class</button>
+                        <button id="nextDateBtn" type="button">Next class</button>
+                    </div>
+                    <div class="date-context" id="dateContext"></div>
+                </section>
+
                 <section class="today-summary">
                     <div class="summary-course">
-                        <h2>DSN 100 · Foundations</h2>
-                        <p>Friday, Aug. 28</p>
-                        <p>Week 2 · Class 5</p>
+                        <h2 id="courseTitle">DSN 100 · Foundations</h2>
+                        <p id="classDate">Friday, Aug. 28</p>
+                        <p id="classWeek">Week 2 · Class 5</p>
                     </div>
                     <div class="summary-metrics">
                         <div class="metric">
@@ -53,12 +66,12 @@
 
                 <section class="active-project" aria-label="Active Project">
                     <div>
-                        <p class="project-title">Tape Mural</p>
+                        <p class="project-title" id="projectTitle">Tape Mural</p>
                         <p class="project-subtitle">Current project</p>
                     </div>
                     <div class="project-milestone">
                         <span>Next milestone:</span>
-                        <strong>Reflection due Monday</strong>
+                        <strong id="projectMilestone">Reflection due Monday</strong>
                     </div>
                 </section>
 
@@ -89,6 +102,15 @@
                 <aside class="student-panel" id="studentPanel">
                     <div class="panel-placeholder">Select a student from the table.</div>
                 </aside>
+            </section>
+            <section class="experimental-tools">
+                <details>
+                    <summary>Experimental Tools</summary>
+                    <div class="experimental-actions">
+                        <button id="resetCurrentClassBtn" type="button">Reset Current Class Test Data</button>
+                        <button id="resetAllDataBtn" type="button">Reset All Pilot Data</button>
+                    </div>
+                </details>
             </section>
         </main>
     </div>

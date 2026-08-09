@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio OS - Instructor Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>Studio OS</h1>
+                    <p class="subtitle">DSN 100 · Foundations</p>
+                </div>
+                <div class="header-center">
+                    <p class="date-info" id="dateInfo">Friday, Aug. 28 · Week 2 · Class 5</p>
+                </div>
+                <div class="header-right">
+                    <div class="project-info">
+                        <p><strong>Current Project:</strong> Tape Mural</p>
+                        <p><strong>Next Milestone:</strong> Reflection due Monday</p>
+                    </div>
+                </div>
+            </div>
+            <div class="header-stats">
+                <span class="stat">18 Students</span>
+                <span class="stat separator">·</span>
+                <span class="stat" id="followUpsStat">Follow-ups due today</span>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Left Sidebar - Student List -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Students</h2>
+                </div>
+                <div class="student-list" id="studentList">
+                    <!-- Students will be populated here -->
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="content">
+                <div class="detail-panel" id="detailPanel">
+                    <div class="panel-placeholder">
+                        <p>Select a student to view details</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

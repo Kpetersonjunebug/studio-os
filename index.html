@@ -15,7 +15,7 @@
             </div>
             <nav class="rail-nav">
                 <button class="rail-link active" id="navToday" type="button">Today</button>
-                <button class="rail-link" type="button">Follow-ups</button>
+                <button class="rail-link" id="navFollowups" type="button">Follow-ups</button>
                 <button class="rail-link" type="button">Projects</button>
                 <button class="rail-link" type="button">Students</button>
                 <button class="rail-link" type="button">Studio Library</button>
@@ -117,6 +117,14 @@
             </section>
         </main>
 
+        <main class="setup-screen hidden" id="followupsScreen">
+            <header class="setup-header">
+                <h2>Follow-ups</h2>
+                <p>Open follow-ups across classes.</p>
+            </header>
+            <div id="followupsContent"></div>
+        </main>
+
         <main class="setup-screen hidden" id="setupScreen">
             <header class="setup-header">
                 <h2>Setup</h2>
@@ -158,6 +166,7 @@
                         <div><input id="newExceptionDescription" type="text" placeholder="Short description"></div>
                     </div>
                     <button id="addExceptionBtn" type="button">Add Exception</button>
+                    <button id="resetAcademicCalendarBtn" type="button" class="placeholder-btn">Reset Academic Calendar</button>
                 </div>
                 </div>
             </section>
@@ -174,9 +183,10 @@
                     </div>
                     <div class="class-actions">
                         <button id="addClassBtn" type="button">Add New Class</button>
+                        <button id="removeClassBtn" type="button" class="placeholder-btn">Remove Class</button>
                     </div>
                 </div>
-                    <div class="setup-grid setup-grid-5">
+                    <div class="setup-grid setup-grid-3">
                     <div>
                         <label for="setupCourseCode">Course Code</label>
                         <input id="setupCourseCode" type="text">
@@ -184,14 +194,6 @@
                     <div>
                         <label for="setupCourseName">Course Name</label>
                         <input id="setupCourseName" type="text">
-                    </div>
-                    <div>
-                        <label for="setupClassStart">Semester Start Date</label>
-                        <input id="setupClassStart" type="date">
-                    </div>
-                    <div>
-                        <label for="setupClassEnd">Semester End Date</label>
-                        <input id="setupClassEnd" type="date">
                     </div>
                     <div>
                         <label>Meeting Days</label>
@@ -215,6 +217,12 @@
                         <button id="addStudentBtn" type="button">Add Student</button>
                     </div>
                 </div>
+                    <div class="setup-actions">
+                        <input id="rosterCsvFileInput" type="file" accept=".csv,text/csv" class="hidden">
+                        <button id="importRosterCsvBtn" type="button" class="placeholder-btn">Import CSV</button>
+                    </div>
+                    <div id="rosterCsvPreview" class="import-preview hidden"></div>
+                    <div id="rosterImportResult" class="import-result hidden"></div>
                 </div>
             </section>
 

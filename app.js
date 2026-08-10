@@ -26,6 +26,7 @@ class StudioOSApp {
                 this.state = this.normalizeState(JSON.parse(raw));
                 this.regenerateAllClassDates();
                 this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
+                this.reconcileLegacyFollowUps();
                 this.saveState();
                 return;
             } catch (err) {
@@ -36,6 +37,7 @@ class StudioOSApp {
         this.tryMigrateLegacyData();
         this.regenerateAllClassDates();
         this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
+        this.reconcileLegacyFollowUps();
         this.saveState();
     }
 
@@ -221,6 +223,29 @@ class StudioOSApp {
             return classObj;
         });
 
+        const followUps = (state.followUps || []).map((f) => {
+            const cls = classes.find((c) => c.id === (f.classId || ""));
+            const originRecord = cls?.dates.find((d) => d.id === f.originDateId || d.dateISO === f.originDateISO);
+            const dueRecord = cls?.dates.find((d) => d.id === f.dueDateId || d.dateISO === f.dueDateISO);
+            const rawStatus = String(f.status || "open").toLowerCase();
+            return {
+                id: Number(f.id),
+                classId: f.classId || "",
+                studentId: Number(f.studentId),
+                originDateId: f.originDateId || originRecord?.id || "",
+                originDateISO: f.originDateISO || f.originDate || originRecord?.dateISO || "",
+                originDateText: f.originDateText || originRecord?.date || "",
+                originNote: f.originNote || f.followUpNote || "",
+                dueDateId: f.dueDateId || dueRecord?.id || "",
+                dueDateISO: f.dueDateISO || f.dueDate || dueRecord?.dateISO || "",
+                status: rawStatus === "complete" || rawStatus === "completed"
+                    ? "complete"
+                    : (rawStatus === "cancelled" || rawStatus === "canceled" ? "cancelled" : "open"),
+                completionDateISO: f.completionDateISO || "",
+                completionDateText: f.completionDateText || "",
+            };
+        });
+
         return {
             selectedClassId: state.selectedClassId || classes[0].id,
             selectedDateIndexByClass: state.selectedDateIndexByClass || fallback.selectedDateIndexByClass,
@@ -235,21 +260,9 @@ class StudioOSApp {
                 })),
                 nextExceptionId: state.academicCalendar?.nextExceptionId || ((state.academicCalendar?.exceptions?.length || fallback.academicCalendar.exceptions.length) + 1),
             },
-            followUps: (state.followUps || []).map((f) => ({
-                id: Number(f.id),
-                classId: f.classId || "",
-                studentId: Number(f.studentId),
-                originDateId: f.originDateId || "",
-                originDateISO: f.originDateISO || "",
-                originDateText: f.originDateText || "",
-                originNote: f.originNote || "",
-                dueDateId: f.dueDateId || "",
-                dueDateISO: f.dueDateISO || "",
-                status: f.status === "complete" ? "complete" : "open",
-                completionDateISO: f.completionDateISO || "",
-                completionDateText: f.completionDateText || "",
-            })),
-            nextFollowUpId: state.nextFollowUpId || 1,
+            followUps,
+            nextFollowUpId: Math.max(Number(state.nextFollowUpId) || 1, ...followUps.map((f) => (Number(f.id) || 0) + 1)),
+            followUpReconciliationVersion: Number(state.followUpReconciliationVersion) || 0,
             classes,
         };
     }
@@ -544,8 +557,13 @@ class StudioOSApp {
         return cls.projects.find((p) => p.id === cls.currentProjectId) || cls.projects[0] || null;
     }
 
-    getFollowUpForStudent(classId, studentId) {
-        return this.state.followUps.find((f) => f.classId === classId && f.studentId === studentId && f.status === "open") || null;
+    getFollowUpForStudent(classId, studentId, referenceDateISO = this.currentDateRecord()?.dateISO || "") {
+        return this.state.followUps.find((f) =>
+            f.classId === classId &&
+            f.studentId === studentId &&
+            f.status === "open" &&
+            (!referenceDateISO || !f.originDateISO || f.originDateISO <= referenceDateISO)
+        ) || null;
     }
 
     getDateByISO(cls, dateISO) {
@@ -566,6 +584,68 @@ class StudioOSApp {
         return prev;
     }
 
+    reconcileLegacyFollowUps() {
+        if (this.state.followUpReconciliationVersion >= 1) return;
+
+        this.state.classes.forEach((cls) => {
+            const selectedIndex = this.state.selectedDateIndexByClass[cls.id] ?? 0;
+            const displayedDate = cls.dates[Math.max(0, Math.min(selectedIndex, Math.max(cls.dates.length - 1, 0)))];
+            if (!displayedDate || displayedDate.isInstructional === false) return;
+
+            cls.roster.forEach((rosterStudent) => {
+                const studentId = rosterStudent.id;
+                const openRecords = this.state.followUps.filter((f) =>
+                    f.classId === cls.id && f.studentId === studentId && f.status === "open"
+                );
+                const validRecords = openRecords.filter((f) => {
+                    const origin = this.getDateByISO(cls, f.originDateISO);
+                    const due = this.getDateByISO(cls, f.dueDateISO);
+                    return origin?.isInstructional !== false && !!origin &&
+                        due?.isInstructional !== false && !!due &&
+                        origin.dateISO <= displayedDate.dateISO &&
+                        due.dateISO > origin.dateISO;
+                });
+                let canonical = validRecords
+                    .slice()
+                    .sort((a, b) => a.originDateISO.localeCompare(b.originDateISO))[0] || null;
+                const displayedStudent = (displayedDate.students || []).find((s) => s.id === studentId);
+
+                if (!canonical && displayedStudent?.followUp === "Next Class") {
+                    const originDate = cls.dates
+                        .filter((d) => d.isInstructional !== false && d.dateISO <= displayedDate.dateISO)
+                        .filter((d) => (d.students || []).some((s) => s.id === studentId && s.followUp === "Next Class"))
+                        .sort((a, b) => b.dateISO.localeCompare(a.dateISO))[0] || displayedDate;
+                    const originStudent = (originDate.students || []).find((s) => s.id === studentId) || displayedStudent;
+                    const dueDate = this.getNextInstructionalDate(cls, originDate.dateISO) || originDate;
+                    canonical = openRecords[0] || {
+                        id: this.state.nextFollowUpId++,
+                        classId: cls.id,
+                        studentId,
+                        completionDateISO: "",
+                        completionDateText: "",
+                    };
+                    if (!openRecords.includes(canonical)) this.state.followUps.push(canonical);
+                    Object.assign(canonical, {
+                        originDateId: originDate.id,
+                        originDateISO: originDate.dateISO,
+                        originDateText: originDate.date,
+                        originNote: originStudent?.followUpNote || canonical.originNote || "",
+                        dueDateId: dueDate.id,
+                        dueDateISO: dueDate.dateISO,
+                        status: "open",
+                    });
+                }
+
+                openRecords.forEach((record) => {
+                    if (record !== canonical) record.status = "cancelled";
+                });
+                if (displayedStudent) displayedStudent.followUp = canonical ? "Next Class" : "None";
+            });
+        });
+
+        this.state.followUpReconciliationVersion = 1;
+    }
+
     processCarryForwardFollowUps(cls, referenceDateISO) {
         if (!referenceDateISO) return;
         const open = this.state.followUps.filter((f) => f.classId === cls.id && f.status === "open");
@@ -581,15 +661,7 @@ class StudioOSApp {
                     fu.dueDateId = next.id;
                     continue;
                 }
-                const student = (dueRecord.students || []).find((s) => s.id === fu.studentId);
-                if (student && student.attendance === "Absent") {
-                    const next = this.getNextInstructionalDate(cls, fu.dueDateISO);
-                    if (!next) break;
-                    fu.dueDateISO = next.dateISO;
-                    fu.dueDateId = next.id;
-                } else {
-                    break;
-                }
+                break;
             }
         });
     }
@@ -604,7 +676,8 @@ class StudioOSApp {
     }
 
     openFollowUpForStudent(cls, date, student) {
-        let open = this.getFollowUpForStudent(cls.id, student.id);
+        const allOpen = this.state.followUps.filter((f) => f.classId === cls.id && f.studentId === student.id && f.status === "open");
+        let open = allOpen[0] || null;
         const nextDate = this.getNextInstructionalDate(cls, date.dateISO) || date;
         if (!open) {
             open = {
@@ -622,10 +695,28 @@ class StudioOSApp {
                 completionDateText: "",
             };
             this.state.followUps.push(open);
-        } else if (!open.originNote && student.followUpNote) {
-            open.originNote = student.followUpNote;
+        } else {
+            Object.assign(open, {
+                originDateId: date.id,
+                originDateISO: date.dateISO,
+                originDateText: date.date,
+                originNote: student.followUpNote || open.originNote || "",
+                dueDateId: nextDate.id,
+                dueDateISO: nextDate.dateISO,
+                status: "open",
+                completionDateISO: "",
+                completionDateText: "",
+            });
         }
+        allOpen.slice(1).forEach((record) => { record.status = "cancelled"; });
         student.followUp = "Next Class";
+    }
+
+    cancelFollowUpForStudent(cls, student) {
+        this.state.followUps
+            .filter((f) => f.classId === cls.id && f.studentId === student.id && f.status === "open")
+            .forEach((f) => { f.status = "cancelled"; });
+        student.followUp = "None";
     }
 
     completeFollowUpForCurrentStudent() {
@@ -777,10 +868,11 @@ class StudioOSApp {
         if (cur && cur.isInstructional !== false) {
             this.processCarryForwardFollowUps(cls, cur.dateISO);
         }
+        const dueFollowUps = this.getDueFollowUpsForTodayCurrentClass();
         this.ensureSelectedStudent();
         this.renderTopControls();
-        this.renderSummary();
-        this.renderFollowUpsDueToday();
+        this.renderSummary(dueFollowUps);
+        this.renderFollowUpsDueToday(dueFollowUps);
         this.renderRosterSection();
         this.renderPanel();
         this.renderClassEvalSection();
@@ -835,7 +927,7 @@ class StudioOSApp {
         document.getElementById("projectMilestone").textContent = project?.nextMilestone || "Not set";
     }
 
-    renderSummary() {
+    renderSummary(dueFollowUps = this.getDueFollowUpsForTodayCurrentClass()) {
         const date = this.currentDateRecord();
         if (!date || date.isInstructional === false) {
             document.getElementById("metricStudents").textContent = "—";
@@ -847,11 +939,10 @@ class StudioOSApp {
         const students = this.currentStudents();
         const needHelp = students.filter((s) => s.overallStatus === "Needs Help").length;
         const atRisk = students.filter((s) => s.attendance !== "Present" && (s.overallStatus === "Needs Help" || s.followUp === "Next Class")).length;
-        const dueFollowUps = this.getDueFollowUpsForTodayCurrentClass().length;
         document.getElementById("metricStudents").textContent = String(students.length);
         document.getElementById("metricNeedHelp").textContent = String(needHelp);
         document.getElementById("metricAtRisk").textContent = String(atRisk);
-        document.getElementById("metricFollowUps").textContent = String(dueFollowUps);
+        document.getElementById("metricFollowUps").textContent = String(dueFollowUps.length);
     }
 
     getDueFollowUpsForTodayCurrentClass() {
@@ -868,7 +959,7 @@ class StudioOSApp {
         );
     }
 
-    renderFollowUpsDueToday() {
+    renderFollowUpsDueToday(due = this.getDueFollowUpsForTodayCurrentClass()) {
         const host = document.getElementById("followUpsDue");
         if (!this.currentClass()) {
             host.innerHTML = '<span class="project-subtitle">No class selected.</span>';
@@ -879,7 +970,6 @@ class StudioOSApp {
             host.innerHTML = `<span class="project-subtitle">NO CLASS — ${this.escapeHtml(date?.exceptionDescription || date?.exceptionType || "")}</span>`;
             return;
         }
-        const due = this.getDueFollowUpsForTodayCurrentClass();
         host.innerHTML = "";
         if (due.length === 0) {
             host.innerHTML = '<span class="project-subtitle">No follow-ups due for this class date.</span>';
@@ -959,8 +1049,8 @@ class StudioOSApp {
             return;
         }
 
-        const dueMap = new Set(this.getDueFollowUpsForTodayCurrentClass().map((f) => f.studentId));
         const selectedId = this.selectedStudentByClassDate[this.selectedKey()];
+        const cls = this.currentClass();
         const previousInstructional = this.getPreviousInstructionalDateRecord(this.currentClass(), date.dateISO);
         const previousStudentsById = Object.fromEntries((previousInstructional?.students || []).map((s) => [s.id, s]));
         tbody.innerHTML = "";
@@ -968,7 +1058,7 @@ class StudioOSApp {
             const tr = document.createElement("tr");
             tr.className = `student-row ${s.id === selectedId ? "selected" : ""}`;
             const previousNote = previousStudentsById[s.id]?.classNote?.trim() || "—";
-            const followStatus = dueMap.has(s.id) ? "Next Class" : s.followUp;
+            const followStatus = this.getFollowUpForStudent(cls.id, s.id, date.dateISO) ? "Next Class" : (s.followUp === "Complete" ? "Complete" : "None");
             tr.innerHTML = `
                 <td><strong>${this.escapeHtml(this.rosterDisplayName(s.name))}</strong></td>
                 <td><button type="button" class="${this.attendanceTagClass(s.attendance)} attendance-pill-btn" data-table-attendance-id="${s.id}">${s.attendance}</button></td>
@@ -1039,14 +1129,12 @@ class StudioOSApp {
                 event.stopPropagation();
                 const studentId = Number(el.getAttribute("data-table-followup-id"));
                 applyAndRefresh(studentId, (student, cls, date) => {
-                    const next = this.nextFollowUpValue(this.getFollowUpForStudent(cls.id, student.id) ? "Next Class" : student.followUp);
+                    const next = this.nextFollowUpValue(this.getFollowUpForStudent(cls.id, student.id, date.dateISO) ? "Next Class" : "None");
                     if (next === "Next Class") {
-                        student.followUp = "Next Class";
                         this.openFollowUpForStudent(cls, date, student);
                         return;
                     }
-                    const open = this.getFollowUpForStudent(cls.id, student.id);
-                    student.followUp = open ? "Next Class" : "None";
+                    this.cancelFollowUpForStudent(cls, student);
                 });
             });
         });
@@ -1074,7 +1162,7 @@ class StudioOSApp {
         }
 
         const cls = this.currentClass();
-        const fu = this.getFollowUpForStudent(cls.id, student.id);
+        const fu = this.getFollowUpForStudent(cls.id, student.id, date.dateISO);
         const previousInstructional = this.getPreviousInstructionalDateRecord(cls, date.dateISO);
         const previousStudent = previousInstructional
             ? (previousInstructional.students || []).find((s) => s.id === student.id) || null
@@ -1088,6 +1176,7 @@ class StudioOSApp {
                     <div>Attendance: <strong>${this.escapeHtml(previousStudent.attendance)}</strong></div>
                     <div>Stage: <strong>${this.escapeHtml(previousStudent.projectStage)}</strong></div>
                     <div>Status: <strong>${this.escapeHtml(previousStudent.overallStatus)}</strong></div>
+                    <div>Progress: <strong>${this.escapeHtml(previousStudent.progress || "—")}</strong></div>
                     <div>Follow-up: <strong>${this.escapeHtml(prevFollowStatus)}</strong></div>
                     <div style="grid-column: 1 / -1;">Note: <strong>${this.escapeHtml(previousStudent.classNote || "—")}</strong></div>
                 </div>
@@ -1136,8 +1225,8 @@ class StudioOSApp {
                     <div>
                         <label for="panelFollowUp">Set Follow-up</label>
                         <select id="panelFollowUp" data-field="followUp">
-                            <option value="None" ${!fu && student.followUp !== "Next Class" ? "selected" : ""}>None</option>
-                            <option value="Next Class" ${fu || student.followUp === "Next Class" ? "selected" : ""}>Next Class</option>
+                            <option value="None" ${!fu ? "selected" : ""}>None</option>
+                            <option value="Next Class" ${fu ? "selected" : ""}>Next Class</option>
                         </select>
                     </div>
                     <div>
@@ -1171,11 +1260,9 @@ class StudioOSApp {
                     const student = this.currentStudent();
                     if (!student) return;
                     if (value === "Next Class") {
-                        student.followUp = "Next Class";
                         this.openFollowUpForCurrentStudent();
                     } else {
-                        const open = this.getFollowUpForStudent(cls.id, student.id);
-                        student.followUp = open ? "Next Class" : "None";
+                        this.cancelFollowUpForStudent(cls, student);
                         this.saveState();
                     }
                     this.renderToday();

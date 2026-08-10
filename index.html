@@ -105,6 +105,43 @@
                             <tbody id="studentTableBody"></tbody>
                         </table>
                     </div>
+                    <section class="class-eval-section" id="classEvalSection">
+                        <div class="class-eval-header">
+                            <span class="class-eval-title">Class Evaluation</span>
+                            <button class="class-eval-toggle" id="classEvalToggleBtn" type="button">Expand</button>
+                        </div>
+                        <div class="class-eval-body hidden" id="classEvalBody">
+                            <div class="class-eval-grid">
+                                <div>
+                                    <label for="evalClassStatus">Class Status</label>
+                                    <select id="evalClassStatus">
+                                        <option value="">—</option>
+                                        <option value="Excellent">Excellent</option>
+                                        <option value="Good">Good</option>
+                                        <option value="Mixed">Mixed</option>
+                                        <option value="Challenging">Challenging</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="evalOverallUnderstanding">Overall Understanding</label>
+                                    <select id="evalOverallUnderstanding">
+                                        <option value="">—</option>
+                                        <option value="Strong">Strong</option>
+                                        <option value="Adequate">Adequate</option>
+                                        <option value="Needs Reinforcement">Needs Reinforcement</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="evalConceptsToReview">Concepts to Review</label>
+                                <textarea id="evalConceptsToReview" rows="2" placeholder="Topics or skills to revisit next class…"></textarea>
+                            </div>
+                            <div>
+                                <label for="evalProjectChanges">Project Changes</label>
+                                <textarea id="evalProjectChanges" rows="2" placeholder="Any adjustments to the project brief, schedule, or expectations…"></textarea>
+                            </div>
+                        </div>
+                    </section>
                 </div>
 
                 <aside class="student-panel" id="studentPanel">
@@ -112,43 +149,6 @@
                 </aside>
             </section>
 
-            <section class="class-eval-section" id="classEvalSection">
-                <div class="class-eval-header">
-                    <span class="class-eval-title">Class Evaluation</span>
-                    <button class="class-eval-toggle" id="classEvalToggleBtn" type="button">Expand</button>
-                </div>
-                <div class="class-eval-body hidden" id="classEvalBody">
-                    <div class="class-eval-grid">
-                        <div>
-                            <label for="evalClassStatus">Class Status</label>
-                            <select id="evalClassStatus">
-                                <option value="">—</option>
-                                <option value="Excellent">Excellent</option>
-                                <option value="Good">Good</option>
-                                <option value="Mixed">Mixed</option>
-                                <option value="Challenging">Challenging</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="evalOverallUnderstanding">Overall Understanding</label>
-                            <select id="evalOverallUnderstanding">
-                                <option value="">—</option>
-                                <option value="Strong">Strong</option>
-                                <option value="Adequate">Adequate</option>
-                                <option value="Needs Reinforcement">Needs Reinforcement</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label for="evalConceptsToReview">Concepts to Review</label>
-                        <textarea id="evalConceptsToReview" rows="2" placeholder="Topics or skills to revisit next class…"></textarea>
-                    </div>
-                    <div>
-                        <label for="evalProjectChanges">Project Changes</label>
-                        <textarea id="evalProjectChanges" rows="2" placeholder="Any adjustments to the project brief, schedule, or expectations…"></textarea>
-                    </div>
-                </div>
-            </section>
             <section class="experimental-tools">
                 <details>
                     <summary>Experimental Tools</summary>

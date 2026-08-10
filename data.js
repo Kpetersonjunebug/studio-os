@@ -56,6 +56,20 @@ const ATTENDANCE_OPTIONS = [
     'Tardy'
 ];
 
+const PROGRESS_OPTIONS = [
+    '',
+    'Strong Progress',
+    'Progressing',
+    'Limited Progress'
+];
+
+const OUTSIDE_WORK_OPTIONS = [
+    '',
+    'Done',
+    'Partial',
+    'Not Done'
+];
+
 // Default student record
 function createDefaultStudent(studentInfo) {
     return {
@@ -64,6 +78,8 @@ function createDefaultStudent(studentInfo) {
         projectStage: 'Sketching',
         overallStatus: 'Developing',
         classNote: '',
+        progress: '',
+        outsideWork: '',
         followUp: 'None',
         followUpNote: '',
         evaluation: {

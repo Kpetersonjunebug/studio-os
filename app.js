@@ -6,6 +6,8 @@ class StudioOSApp {
         this.selectedStudentByClassDate = {};
         this.rosterCsvDraft = null;
         this.rosterImportResult = null;
+        this.rosterCollapsed = false;
+        this.classEvalCollapsed = true;
         this.page = "today";
         this.setupOpenSection = "classes";
         this.init();
@@ -284,8 +286,18 @@ class StudioOSApp {
             isInstructional: d.isInstructional !== false,
             exceptionType: d.exceptionType || "",
             exceptionDescription: d.exceptionDescription || "",
+            classEvaluation: this.normalizeClassEvaluation(d.classEvaluation),
             students: (d.isInstructional === false ? [] : (d.students || []).map((s, i) => this.normalizeStudentRecord(s, i, roster))),
         }));
+    }
+
+    normalizeClassEvaluation(existing) {
+        return {
+            classStatus: existing?.classStatus || "",
+            overallUnderstanding: existing?.overallUnderstanding || "",
+            conceptsToReview: existing?.conceptsToReview || "",
+            projectChanges: existing?.projectChanges || "",
+        };
     }
 
     normalizeRoster(roster, dates, fallbackRoster) {
@@ -421,6 +433,7 @@ class StudioOSApp {
                 ...entry,
                 week: Math.floor((cursor - start) / (7 * 24 * 60 * 60 * 1000)) + 1,
                 classNumber,
+                classEvaluation: this.normalizeClassEvaluation(existing?.classEvaluation),
                 students: existing ? existing.students : cls.roster.map((r) => createDefaultStudent({ id: r.id, name: r.name })),
             };
         });
@@ -586,6 +599,11 @@ class StudioOSApp {
         const date = this.currentDateRecord();
         const student = this.currentStudent();
         if (!cls || !date || !student || date.isInstructional === false) return;
+        this.openFollowUpForStudent(cls, date, student);
+        this.saveState();
+    }
+
+    openFollowUpForStudent(cls, date, student) {
         let open = this.getFollowUpForStudent(cls.id, student.id);
         const nextDate = this.getNextInstructionalDate(cls, date.dateISO) || date;
         if (!open) {
@@ -608,7 +626,6 @@ class StudioOSApp {
             open.originNote = student.followUpNote;
         }
         student.followUp = "Next Class";
-        this.saveState();
     }
 
     completeFollowUpForCurrentStudent() {
@@ -630,6 +647,16 @@ class StudioOSApp {
         document.getElementById("navToday").addEventListener("click", () => this.switchPage("today"));
         document.getElementById("navFollowups")?.addEventListener("click", () => this.switchPage("followups"));
         document.getElementById("navSetup").addEventListener("click", () => this.switchPage("setup"));
+
+        document.getElementById("rosterToggleBtn").addEventListener("click", () => {
+            this.rosterCollapsed = !this.rosterCollapsed;
+            this.renderRosterSection();
+        });
+
+        document.getElementById("classEvalToggleBtn").addEventListener("click", () => {
+            this.classEvalCollapsed = !this.classEvalCollapsed;
+            this.renderClassEvalSection();
+        });
         document.getElementById("setupHeaderCalendar").addEventListener("click", () => this.toggleSetupSection("calendar"));
         document.getElementById("setupHeaderClasses").addEventListener("click", () => this.toggleSetupSection("classes"));
         document.getElementById("setupHeaderRoster").addEventListener("click", () => this.toggleSetupSection("roster"));
@@ -741,8 +768,9 @@ class StudioOSApp {
             this.renderTopControls();
             this.renderSummary();
             this.renderFollowUpsDueToday();
-            this.renderTable();
+            this.renderRosterSection();
             this.renderPanel();
+            this.renderClassEvalSection();
             return;
         }
         const cur = this.currentDateRecord();
@@ -753,8 +781,21 @@ class StudioOSApp {
         this.renderTopControls();
         this.renderSummary();
         this.renderFollowUpsDueToday();
-        this.renderTable();
+        this.renderRosterSection();
         this.renderPanel();
+        this.renderClassEvalSection();
+    }
+
+    renderRosterSection() {
+        const cls = this.currentClass();
+        const rosterCount = cls ? cls.roster.length : 0;
+        const titleEl = document.getElementById("rosterHeaderTitle");
+        const wrapEl = document.getElementById("rosterTableWrap");
+        const toggleBtn = document.getElementById("rosterToggleBtn");
+        if (titleEl) titleEl.textContent = `Student Roster · ${rosterCount} Student${rosterCount !== 1 ? "s" : ""}`;
+        if (wrapEl) wrapEl.classList.toggle("collapsed", this.rosterCollapsed);
+        if (toggleBtn) toggleBtn.textContent = this.rosterCollapsed ? "Expand" : "Collapse";
+        this.renderTable();
     }
 
     renderTopControls() {
@@ -887,6 +928,16 @@ class StudioOSApp {
         return "Present";
     }
 
+    nextOverallStatusValue(value) {
+        if (value === "Strong") return "Developing";
+        if (value === "Developing") return "Needs Help";
+        return "Strong";
+    }
+
+    nextFollowUpValue(value) {
+        return value === "Next Class" ? "None" : "Next Class";
+    }
+
     escapeHtml(text) {
         return String(text || "")
             .replaceAll("&", "&amp;")
@@ -900,30 +951,35 @@ class StudioOSApp {
         const tbody = document.getElementById("studentTableBody");
         const date = this.currentDateRecord();
         if (!date) {
-            tbody.innerHTML = '<tr><td colspan="7">No class date available.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6">No class date available.</td></tr>';
             return;
         }
         if (date.isInstructional === false) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px 8px;">${this.escapeHtml(date.date)}<br><strong>NO CLASS — ${this.escapeHtml(date.exceptionDescription || date.exceptionType || "Scheduled exception")}</strong></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px 8px;">${this.escapeHtml(date.date)}<br><strong>NO CLASS — ${this.escapeHtml(date.exceptionDescription || date.exceptionType || "Scheduled exception")}</strong></td></tr>`;
             return;
         }
 
         const dueMap = new Set(this.getDueFollowUpsForTodayCurrentClass().map((f) => f.studentId));
         const selectedId = this.selectedStudentByClassDate[this.selectedKey()];
+        const previousInstructional = this.getPreviousInstructionalDateRecord(this.currentClass(), date.dateISO);
+        const previousStudentsById = Object.fromEntries((previousInstructional?.students || []).map((s) => [s.id, s]));
         tbody.innerHTML = "";
         this.currentStudents().slice().sort((a, b) => this.compareStudentNames(a.name, b.name)).forEach((s) => {
             const tr = document.createElement("tr");
             tr.className = `student-row ${s.id === selectedId ? "selected" : ""}`;
-            const note = s.classNote?.trim() ? s.classNote.trim() : "—";
+            const previousNote = previousStudentsById[s.id]?.classNote?.trim() || "—";
             const followStatus = dueMap.has(s.id) ? "Next Class" : s.followUp;
             tr.innerHTML = `
                 <td><strong>${this.escapeHtml(this.rosterDisplayName(s.name))}</strong></td>
-                <td><button type="button" class="${this.attendanceTagClass(s.attendance)} attendance-pill-btn" data-attendance-student-id="${s.id}">${s.attendance}</button></td>
-                <td><span class="${this.statusTagClass(s.overallStatus)}">${s.overallStatus}</span></td>
-                <td>${s.projectStage}</td>
-                <td><span class="${this.statusTagClass(s.overallStatus)}">${s.overallStatus}</span></td>
-                <td class="last-note">${this.escapeHtml(note)}</td>
-                <td><span class="${this.followTagClass(followStatus)}">${followStatus}</span></td>
+                <td><button type="button" class="${this.attendanceTagClass(s.attendance)} attendance-pill-btn" data-table-attendance-id="${s.id}">${s.attendance}</button></td>
+                <td>
+                    <select class="table-edit-select" data-table-stage-id="${s.id}">
+                        ${this.options(PROJECT_STAGES, s.projectStage)}
+                    </select>
+                </td>
+                <td><button type="button" class="${this.statusTagClass(s.overallStatus)} table-chip-btn" data-table-status-id="${s.id}">${this.escapeHtml(s.overallStatus)}</button></td>
+                <td class="last-note">${this.escapeHtml(previousNote)}</td>
+                <td><button type="button" class="${this.followTagClass(followStatus)} table-chip-btn" data-table-followup-id="${s.id}">${this.escapeHtml(followStatus)}</button></td>
             `;
             tr.addEventListener("click", () => {
                 this.selectedStudentByClassDate[this.selectedKey()] = s.id;
@@ -933,18 +989,65 @@ class StudioOSApp {
             tbody.appendChild(tr);
         });
 
-        tbody.querySelectorAll("[data-attendance-student-id]").forEach((el) => {
+        const applyAndRefresh = (studentId, updater) => {
+            const cls = this.currentClass();
+            const date = this.currentDateRecord();
+            const targetStudent = this.currentStudents().find((st) => st.id === studentId);
+            if (!cls || !date || !targetStudent) return;
+            updater(targetStudent, cls, date);
+            this.saveState();
+            this.renderSummary();
+            this.renderFollowUpsDueToday();
+            this.renderTable();
+            if (this.currentStudent()?.id === studentId) this.renderPanel();
+        };
+
+        tbody.querySelectorAll("[data-table-attendance-id]").forEach((el) => {
             el.addEventListener("click", (event) => {
                 event.stopPropagation();
-                const studentId = Number(el.getAttribute("data-attendance-student-id"));
-                const targetStudent = this.currentStudents().find((st) => st.id === studentId);
-                if (!targetStudent) return;
-                targetStudent.attendance = this.nextAttendanceValue(targetStudent.attendance);
-                this.saveState();
-                this.renderSummary();
-                this.renderFollowUpsDueToday();
-                this.renderTable();
-                if (this.currentStudent()?.id === studentId) this.renderPanel();
+                const studentId = Number(el.getAttribute("data-table-attendance-id"));
+                applyAndRefresh(studentId, (student) => {
+                    student.attendance = this.nextAttendanceValue(student.attendance);
+                });
+            });
+        });
+
+        tbody.querySelectorAll("[data-table-status-id]").forEach((el) => {
+            el.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const studentId = Number(el.getAttribute("data-table-status-id"));
+                applyAndRefresh(studentId, (student) => {
+                    student.overallStatus = this.nextOverallStatusValue(student.overallStatus);
+                });
+            });
+        });
+
+        tbody.querySelectorAll("[data-table-stage-id]").forEach((el) => {
+            el.addEventListener("click", (event) => event.stopPropagation());
+            el.addEventListener("change", (event) => {
+                event.stopPropagation();
+                const studentId = Number(el.getAttribute("data-table-stage-id"));
+                const nextValue = event.target.value;
+                applyAndRefresh(studentId, (student) => {
+                    student.projectStage = nextValue;
+                });
+            });
+        });
+
+        tbody.querySelectorAll("[data-table-followup-id]").forEach((el) => {
+            el.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const studentId = Number(el.getAttribute("data-table-followup-id"));
+                applyAndRefresh(studentId, (student, cls, date) => {
+                    const next = this.nextFollowUpValue(this.getFollowUpForStudent(cls.id, student.id) ? "Next Class" : student.followUp);
+                    if (next === "Next Class") {
+                        student.followUp = "Next Class";
+                        this.openFollowUpForStudent(cls, date, student);
+                        return;
+                    }
+                    const open = this.getFollowUpForStudent(cls.id, student.id);
+                    student.followUp = open ? "Next Class" : "None";
+                });
             });
         });
     }
@@ -976,82 +1079,71 @@ class StudioOSApp {
         const previousStudent = previousInstructional
             ? (previousInstructional.students || []).find((s) => s.id === student.id) || null
             : null;
-        const recapFollowStatus = fu ? "Active" : (previousStudent ? previousStudent.followUp : "None");
-        const recapBlock = previousInstructional && previousStudent
-            ? `
+        const prevFollowStatus = previousStudent ? previousStudent.followUp : "None";
+
+        const lastClassBlock = previousInstructional && previousStudent
+            ? `<div class="panel-section panel-section-last-class">
+                <div class="panel-section-label">Last Class — ${this.escapeHtml(previousInstructional.date)}</div>
                 <div class="context-grid">
-                    <div style="grid-column: 1 / -1;font-size:12px;color:#5c685e;">Last Class — <strong>${this.escapeHtml(previousInstructional.date)}</strong></div>
-                    <div>Standing: <strong>${this.escapeHtml(previousStudent.overallStatus)}</strong></div>
-                    <div>Project stage: <strong>${this.escapeHtml(previousStudent.projectStage)}</strong></div>
                     <div>Attendance: <strong>${this.escapeHtml(previousStudent.attendance)}</strong></div>
-                    <div style="grid-column: 1 / -1;">Last note: <strong>${this.escapeHtml(previousStudent.classNote || "No note")}</strong></div>
-                    <div>Follow-up: <strong>${this.escapeHtml(recapFollowStatus)}</strong></div>
+                    <div>Stage: <strong>${this.escapeHtml(previousStudent.projectStage)}</strong></div>
+                    <div>Status: <strong>${this.escapeHtml(previousStudent.overallStatus)}</strong></div>
+                    <div>Follow-up: <strong>${this.escapeHtml(prevFollowStatus)}</strong></div>
+                    <div style="grid-column: 1 / -1;">Note: <strong>${this.escapeHtml(previousStudent.classNote || "—")}</strong></div>
                 </div>
-            `
-            : `<div style="font-size:12px;color:#5c685e;">No previous class record.</div>`;
+               </div>`
+            : `<div class="panel-section panel-section-last-class"><div class="panel-section-label">Last Class</div><div style="font-size:12px;color:var(--muted);">No previous class record.</div></div>`;
+
         const fuBlock = fu
-            ? `<div class="setup-subsection" style="margin:8px 0;border-top:1px solid #e2e8e2;padding-top:8px;">
-                <div style="font-size:11px;color:#5c685e;">Active follow-up</div>
-                <div style="font-size:12px;">Origin: <strong>${this.escapeHtml(fu.originDateText)}</strong></div>
-                <div style="font-size:12px;">Note: ${this.escapeHtml(fu.originNote || "—")}</div>
-                <div style="margin-top:6px;"><button type="button" id="completeFollowupBtn">Complete</button></div>
+            ? `<div class="panel-section panel-section-followup-due">
+                <div class="panel-section-label">Follow-up Due Today</div>
+                <div style="font-size:12px;color:var(--muted);">Origin: <strong style="color:var(--text)">${this.escapeHtml(fu.originDateText)}</strong></div>
+                <div class="panel-followup-note">${this.escapeHtml(fu.originNote || "—")}</div>
+                <button type="button" id="completeFollowupBtn" class="panel-complete-btn">Mark Complete</button>
                </div>`
             : "";
 
         panel.innerHTML = `
-            <div class="panel-header">
-                <h3>${this.escapeHtml(student.name)}</h3>
-                ${recapBlock}
-                ${fuBlock}
+            <div class="panel-student-name">${this.escapeHtml(student.name)}</div>
+            ${lastClassBlock}
+            ${fuBlock}
+            <div class="panel-section">
+                <div class="panel-section-label">Today</div>
+                <div class="form-stack">
+                    <div>
+                        <label for="classNote">Class Note</label>
+                        <textarea id="classNote" data-field="classNote" rows="4">${this.escapeHtml(student.classNote || "")}</textarea>
+                    </div>
+                    <div class="row-two">
+                        <div>
+                            <label for="panelProgress">Progress</label>
+                            <select id="panelProgress" data-field="progress">
+                                ${this.options(PROGRESS_OPTIONS, student.progress || "")}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="panelOutsideWork">Outside Work</label>
+                            <select id="panelOutsideWork" data-field="outsideWork">
+                                ${this.options(OUTSIDE_WORK_OPTIONS, student.outsideWork || "")}
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="form-stack">
-                <div class="row-two">
+            <div class="panel-section">
+                <div class="panel-section-label">Follow-up</div>
+                <div class="form-stack">
                     <div>
-                        <label for="attendance">Attendance</label>
-                        <select id="attendance" data-field="attendance">${this.options(ATTENDANCE_OPTIONS, student.attendance)}</select>
+                        <label for="panelFollowUp">Set Follow-up</label>
+                        <select id="panelFollowUp" data-field="followUp">
+                            <option value="None" ${!fu && student.followUp !== "Next Class" ? "selected" : ""}>None</option>
+                            <option value="Next Class" ${fu || student.followUp === "Next Class" ? "selected" : ""}>Next Class</option>
+                        </select>
                     </div>
                     <div>
-                        <label for="overallStatus">Overall Status</label>
-                        <select id="overallStatus" data-field="overallStatus">${this.options(OVERALL_STATUS, student.overallStatus)}</select>
+                        <label for="followUpNote">Follow-up Note</label>
+                        <textarea id="followUpNote" data-field="followUpNote">${this.escapeHtml(student.followUpNote || "")}</textarea>
                     </div>
-                </div>
-                <div>
-                    <label for="projectStage">Project Stage</label>
-                    <select id="projectStage" data-field="projectStage">${this.options(PROJECT_STAGES, student.projectStage)}</select>
-                </div>
-                <div>
-                    <label for="classNote">Class Note</label>
-                    <textarea id="classNote" data-field="classNote">${this.escapeHtml(student.classNote || "")}</textarea>
-                </div>
-                <div>
-                    <label for="followUp">Follow-up</label>
-                    <select id="followUp" data-field="followUp">${this.options(FOLLOW_UP_STATUS, fu ? "Next Class" : student.followUp)}</select>
-                </div>
-                <div>
-                    <label for="followUpNote">Follow-up Note</label>
-                    <textarea id="followUpNote" data-field="followUpNote">${this.escapeHtml(student.followUpNote || "")}</textarea>
-                </div>
-                <div class="evaluation-grid">
-                    <div>
-                        <label for="evalConcept">Concept</label>
-                        <select id="evalConcept" data-field="evaluation.concept">${this.options(EVALUATION_LEVELS, student.evaluation.concept)}</select>
-                    </div>
-                    <div>
-                        <label for="evalCraft">Craft / Execution</label>
-                        <select id="evalCraft" data-field="evaluation.craft">${this.options(EVALUATION_LEVELS, student.evaluation.craft)}</select>
-                    </div>
-                    <div>
-                        <label for="evalPresentation">Presentation / Graphics</label>
-                        <select id="evalPresentation" data-field="evaluation.presentation">${this.options(EVALUATION_LEVELS, student.evaluation.presentation)}</select>
-                    </div>
-                    <div>
-                        <label for="evalTechnical">Technical Deliverables</label>
-                        <select id="evalTechnical" data-field="evaluation.technical">${this.options(EVALUATION_LEVELS, student.evaluation.technical)}</select>
-                    </div>
-                </div>
-                <div>
-                    <label for="evaluationNote">Evaluation Note</label>
-                    <textarea id="evaluationNote" data-field="evaluationNote">${this.escapeHtml(student.evaluationNote || "")}</textarea>
                 </div>
             </div>
         `;
@@ -1068,6 +1160,8 @@ class StudioOSApp {
 
     bindPanelInputs() {
         const panel = document.getElementById("studentPanel");
+
+        // Select fields
         panel.querySelectorAll("select[data-field]").forEach((el) => {
             el.addEventListener("change", (e) => {
                 const field = e.target.getAttribute("data-field");
@@ -1079,8 +1173,6 @@ class StudioOSApp {
                     if (value === "Next Class") {
                         student.followUp = "Next Class";
                         this.openFollowUpForCurrentStudent();
-                    } else if (value === "Complete") {
-                        this.completeFollowUpForCurrentStudent();
                     } else {
                         const open = this.getFollowUpForStudent(cls.id, student.id);
                         student.followUp = open ? "Next Class" : "None";
@@ -1094,6 +1186,7 @@ class StudioOSApp {
             });
         });
 
+        // Textarea fields
         panel.querySelectorAll("textarea[data-field]").forEach((el) => {
             el.addEventListener("input", (e) => {
                 const field = e.target.getAttribute("data-field");
@@ -1123,6 +1216,51 @@ class StudioOSApp {
         }
         this.saveState();
         if (rerender) this.render();
+    }
+
+    renderClassEvalSection() {
+        const bodyEl = document.getElementById("classEvalBody");
+        const toggleBtn = document.getElementById("classEvalToggleBtn");
+        const sectionEl = document.getElementById("classEvalSection");
+        if (!bodyEl || !toggleBtn) return;
+
+        toggleBtn.textContent = this.classEvalCollapsed ? "Expand" : "Collapse";
+        bodyEl.classList.toggle("hidden", this.classEvalCollapsed);
+
+        if (this.classEvalCollapsed) return;
+
+        const date = this.currentDateRecord();
+        if (!date || date.isInstructional === false) {
+            bodyEl.innerHTML = '<div style="font-size:12px;color:var(--muted);">No class evaluation for non-instructional dates.</div>';
+            return;
+        }
+
+        const eval_ = date.classEvaluation || this.normalizeClassEvaluation(null);
+
+        document.getElementById("evalClassStatus").value = eval_.classStatus || "";
+        document.getElementById("evalOverallUnderstanding").value = eval_.overallUnderstanding || "";
+        document.getElementById("evalConceptsToReview").value = eval_.conceptsToReview || "";
+        document.getElementById("evalProjectChanges").value = eval_.projectChanges || "";
+
+        const saveEval = () => {
+            const d = this.currentDateRecord();
+            if (!d || d.isInstructional === false) return;
+            if (!d.classEvaluation) d.classEvaluation = this.normalizeClassEvaluation(null);
+            d.classEvaluation.classStatus = document.getElementById("evalClassStatus").value;
+            d.classEvaluation.overallUnderstanding = document.getElementById("evalOverallUnderstanding").value;
+            d.classEvaluation.conceptsToReview = document.getElementById("evalConceptsToReview").value;
+            d.classEvaluation.projectChanges = document.getElementById("evalProjectChanges").value;
+            this.saveState();
+        };
+
+        ["evalClassStatus", "evalOverallUnderstanding"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) { el.onchange = saveEval; }
+        });
+        ["evalConceptsToReview", "evalProjectChanges"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) { el.oninput = saveEval; }
+        });
     }
 
     // Follow-ups page

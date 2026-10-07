@@ -13,6 +13,9 @@ class StudioOSApp {
         this.classEvalBodyMarkup = document.getElementById("classEvalBody")?.innerHTML || "";
         this.page = "today";
         this.setupOpenSection = "classes";
+        this.cloudSync = null;
+        this.cloudSyncTimer = null;
+        this.cloudSyncBusy = false;
         this.init();
     }
 
@@ -20,6 +23,7 @@ class StudioOSApp {
         this.loadState();
         this.bindGlobalControls();
         this.render();
+        this.initializeCloudSync();
     }
 
     loadState() {
@@ -47,10 +51,162 @@ class StudioOSApp {
         this.saveState();
     }
 
-    saveState(updateBackup = true) {
+    saveState(updateBackup = true, scheduleCloudSync = true) {
         const serialized = JSON.stringify(this.state);
         localStorage.setItem(this.storageKey, serialized);
         if (updateBackup) this.saveBackupSnapshot(this.state, "automatic");
+        if (scheduleCloudSync) this.scheduleCloudRosterSync();
+    }
+
+    cloudSyncMetaKey() {
+        return this.cloudSync?.user ? `studioOS_classes_students_sync_${this.cloudSync.user.id}` : "";
+    }
+
+    readCloudSyncFingerprint() {
+        const key = this.cloudSyncMetaKey();
+        if (!key) return "";
+        try {
+            return JSON.parse(localStorage.getItem(key) || "{}").fingerprint || "";
+        } catch (_) {
+            return "";
+        }
+    }
+
+    saveCloudSyncFingerprint(fingerprint) {
+        const key = this.cloudSyncMetaKey();
+        if (!key) return;
+        localStorage.setItem(key, JSON.stringify({ fingerprint, syncedAt: new Date().toISOString() }));
+    }
+
+    updateCloudSyncStatus(kind, message) {
+        const status = document.getElementById("cloudSyncStatus");
+        if (status) {
+            status.className = `cloud-sync-status status-${kind}`;
+            status.textContent = message;
+        }
+        this.renderCloudSyncControls();
+    }
+
+    renderCloudSyncControls() {
+        const configured = Boolean(this.cloudSync?.isConfigured());
+        const signedIn = Boolean(this.cloudSync?.user);
+        const emailInput = document.getElementById("cloudSyncEmail");
+        const signInButton = document.getElementById("cloudSyncSignInBtn");
+        const syncButton = document.getElementById("cloudSyncNowBtn");
+        const signOutButton = document.getElementById("cloudSyncSignOutBtn");
+        if (!emailInput || !signInButton || !syncButton || !signOutButton) return;
+        emailInput.disabled = !configured || signedIn;
+        signInButton.classList.toggle("hidden", signedIn);
+        signInButton.disabled = !configured;
+        syncButton.classList.toggle("hidden", !signedIn);
+        syncButton.disabled = this.cloudSyncBusy;
+        signOutButton.classList.toggle("hidden", !signedIn);
+    }
+
+    async initializeCloudSync() {
+        if (!window.StudioOSCloudSync) return;
+        this.cloudSync = new window.StudioOSCloudSync({
+            config: window.STUDIO_OS_SUPABASE,
+            supabaseLibrary: window.supabase,
+            onStatus: (kind, message) => this.updateCloudSyncStatus(kind, message),
+        });
+        try {
+            const user = await this.cloudSync.initialize();
+            this.renderCloudSyncControls();
+            if (user) await this.syncClassesAndStudents();
+        } catch (err) {
+            console.error("Studio OS cloud initialization failed; continuing locally.", err);
+            this.updateCloudSyncStatus("error", "Cloud unavailable — working locally");
+        }
+    }
+
+    scheduleCloudRosterSync() {
+        if (!this.cloudSync?.user || this.cloudSyncBusy) return;
+        window.clearTimeout(this.cloudSyncTimer);
+        this.cloudSyncTimer = window.setTimeout(() => this.syncClassesAndStudents(), 900);
+    }
+
+    createCloudClassShell(id) {
+        return {
+            id,
+            code: "NEW 000",
+            name: "New Class",
+            meetingDays: ["Mon"],
+            roster: [],
+            nextStudentId: 1,
+            syllabus: { title: "", notes: "" },
+            classEvaluation: {
+                classPace: "On Schedule",
+                overallUnderstanding: "Adequate",
+                conceptsToReview: "",
+                projectChanges: "",
+            },
+            projects: [{ id: `${id}-p1`, name: "New Project", startDate: "", dueDate: "", nextMilestone: "", notes: "" }],
+            currentProjectId: `${id}-p1`,
+            dates: [],
+        };
+    }
+
+    applyCloudRosterSnapshot(snapshot) {
+        const previousSelectedClassId = this.state.selectedClassId;
+        this.saveBackupSnapshot(this.state, "pre-cloud-classes-students-merge");
+        window.StudioOSCloudSync.mergeSnapshot(this.state, snapshot, (id) => this.createCloudClassShell(id));
+        this.regenerateAllClassDates();
+        this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
+        this.state.selectedClassId = this.state.classes.some((cls) => cls.id === previousSelectedClassId)
+            ? previousSelectedClassId
+            : (this.state.classes[0]?.id || "");
+        this.ensureSelectedStudent(true);
+        this.saveState(false, false);
+        this.render();
+    }
+
+    async syncClassesAndStudents() {
+        if (!this.cloudSync?.user || this.cloudSyncBusy) return;
+        this.cloudSyncBusy = true;
+        this.updateCloudSyncStatus("syncing", "Syncing Classes + Students…");
+        try {
+            const localSnapshot = window.StudioOSCloudSync.buildSnapshot(this.state);
+            const remoteSnapshot = await this.cloudSync.fetchSnapshot();
+            const localFingerprint = window.StudioOSCloudSync.canonicalSnapshot(localSnapshot);
+            const remoteFingerprint = window.StudioOSCloudSync.canonicalSnapshot(remoteSnapshot);
+            const lastFingerprint = this.readCloudSyncFingerprint();
+
+            if (remoteSnapshot.length === 0) {
+                await this.cloudSync.pushSnapshot(localSnapshot);
+                this.saveCloudSyncFingerprint(localFingerprint);
+                this.updateCloudSyncStatus("synced", "Classes + Students synced");
+                return;
+            }
+
+            if (!lastFingerprint || localFingerprint === lastFingerprint) {
+                this.applyCloudRosterSnapshot(remoteSnapshot);
+                this.saveCloudSyncFingerprint(remoteFingerprint);
+                this.updateCloudSyncStatus("synced", "Classes + Students synced");
+                return;
+            }
+
+            if (remoteFingerprint === lastFingerprint) {
+                await this.cloudSync.pushSnapshot(localSnapshot);
+                this.saveCloudSyncFingerprint(localFingerprint);
+                this.updateCloudSyncStatus("synced", "Classes + Students synced");
+                return;
+            }
+
+            if (localFingerprint === remoteFingerprint) {
+                this.saveCloudSyncFingerprint(localFingerprint);
+                this.updateCloudSyncStatus("synced", "Classes + Students synced");
+                return;
+            }
+
+            this.updateCloudSyncStatus("conflict", "Sync paused — Classes or Students changed on two devices");
+        } catch (err) {
+            console.error("Studio OS Classes + Students sync failed; local data is still saved.", err);
+            this.updateCloudSyncStatus("error", "Cloud sync failed — local data is safe");
+        } finally {
+            this.cloudSyncBusy = false;
+            this.renderCloudSyncControls();
+        }
     }
 
     isValidPilotState(state) {
@@ -877,6 +1033,29 @@ class StudioOSApp {
         document.getElementById("navToday").addEventListener("click", () => this.switchPage("today"));
         document.getElementById("navFollowups")?.addEventListener("click", () => this.switchPage("followups"));
         document.getElementById("navSetup").addEventListener("click", () => this.switchPage("setup"));
+
+        document.getElementById("cloudSyncSignInBtn").addEventListener("click", async () => {
+            const email = document.getElementById("cloudSyncEmail").value.trim();
+            if (!email || !this.cloudSync) return;
+            try {
+                await this.cloudSync.sendMagicLink(email);
+                this.updateCloudSyncStatus("pending", "Check your email for the Studio OS sign-in link");
+            } catch (err) {
+                console.error("Unable to send Studio OS sign-in link.", err);
+                this.updateCloudSyncStatus("error", "Could not send sign-in link");
+            }
+        });
+        document.getElementById("cloudSyncNowBtn").addEventListener("click", () => this.syncClassesAndStudents());
+        document.getElementById("cloudSyncSignOutBtn").addEventListener("click", async () => {
+            if (!this.cloudSync) return;
+            try {
+                await this.cloudSync.signOut();
+                this.updateCloudSyncStatus("signed-out", "Signed out — local data remains available");
+            } catch (err) {
+                console.error("Unable to sign out of Studio OS cloud sync.", err);
+                this.updateCloudSyncStatus("error", "Could not sign out");
+            }
+        });
 
         document.getElementById("rosterToggleBtn").addEventListener("click", () => {
             this.rosterCollapsed = !this.rosterCollapsed;

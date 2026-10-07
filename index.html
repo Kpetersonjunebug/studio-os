@@ -29,6 +29,16 @@
             <nav class="rail-nav rail-nav-bottom">
                 <button class="rail-link" id="navSetup" type="button">Setup</button>
             </nav>
+            <section class="cloud-sync-panel" aria-label="Studio OS cloud sync">
+                <div class="cloud-sync-heading">Classes + Students</div>
+                <div id="cloudSyncStatus" class="cloud-sync-status status-local">Local only — Supabase is not configured</div>
+                <input id="cloudSyncEmail" type="email" autocomplete="email" placeholder="Email for sync" disabled>
+                <div class="cloud-sync-actions">
+                    <button id="cloudSyncSignInBtn" type="button" disabled>Sign in</button>
+                    <button id="cloudSyncNowBtn" type="button" class="hidden">Sync now</button>
+                    <button id="cloudSyncSignOutBtn" type="button" class="hidden">Sign out</button>
+                </div>
+            </section>
         </aside>
 
         <main class="today-screen" id="todayScreen">
@@ -326,7 +336,10 @@
         </main>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+    <script src="supabase-config.js"></script>
+    <script src="supabase-sync.js"></script>
     <script src="data.js"></script>
-    <script src="app.js?v=20260828-1545"></script>
+    <script src="app.js?v=20261007-classes-students-sync"></script>
 </body>
 </html>

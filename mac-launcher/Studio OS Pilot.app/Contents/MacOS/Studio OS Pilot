@@ -1,0 +1,3 @@
+#!/bin/zsh
+
+exec "/Users/kevicat/canvas-apps/studio-os-web-test/mac-launcher/Studio OS Pilot.sh"

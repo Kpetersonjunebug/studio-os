@@ -48,8 +48,11 @@ h3 {
     color: #e4ece5;
     display: flex;
     flex-direction: column;
+    height: 100vh;
     padding: 14px 12px;
     border-right: 1px solid #183125;
+    position: sticky;
+    top: 0;
 }
 
 .rail-brand {
@@ -79,6 +82,35 @@ h3 {
     margin-top: auto;
     padding-top: 10px;
     border-top: 1px solid #345845;
+}
+
+.rail-project-reminder {
+    margin-top: 24px;
+    border-top: 1px solid #345845;
+    padding: 14px 8px 2px;
+}
+
+.rail-project-name {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 7px;
+}
+
+.rail-reminder-label {
+    color: #9fb3a4;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+.rail-reminder-text {
+    color: #edf4ee;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
 }
 
 .rail-link {
@@ -204,8 +236,8 @@ h3 {
 }
 
 .active-project {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(420px, 1.5fr);
     align-items: center;
     gap: 10px;
     border: 1px solid var(--line);
@@ -213,6 +245,40 @@ h3 {
     background: #fbfcfb;
     padding: 7px 10px;
     margin-bottom: 9px;
+}
+
+.project-context-right {
+    justify-self: end;
+    min-width: 0;
+    text-align: right;
+    width: min(560px, 100%);
+}
+
+.previous-eval-reminders {
+    display: grid;
+    gap: 3px;
+    margin-top: 3px;
+    font-size: 11px;
+    min-width: 0;
+}
+
+.previous-eval-reminders span {
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+}
+
+.previous-eval-reminders strong {
+    font-weight: 600;
+}
+
+.concepts-reminder {
+    display: block;
+}
+
+.concepts-reminder span {
+    margin-right: 6px;
 }
 
 .project-title {
@@ -229,6 +295,7 @@ h3 {
     display: flex;
     align-items: baseline;
     gap: 6px;
+    justify-content: flex-end;
     font-size: 12px;
 }
 
@@ -467,6 +534,12 @@ h3 {
     max-width: 460px;
     white-space: normal;
     word-break: break-word;
+}
+
+.homework-status {
+    color: var(--muted);
+    min-width: 92px;
+    white-space: nowrap;
 }
 
 .student-panel {
@@ -902,7 +975,9 @@ textarea:focus {
         flex-direction: row;
         align-items: center;
         gap: 12px;
+        height: auto;
         overflow-x: auto;
+        position: static;
     }
 
     .rail-brand {
@@ -915,6 +990,10 @@ textarea:focus {
     .rail-nav {
         flex-direction: row;
         min-width: max-content;
+    }
+
+    .rail-project-reminder {
+        display: none;
     }
 
     .today-summary {

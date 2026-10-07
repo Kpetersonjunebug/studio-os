@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Studio OS V2.5 - Today</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260828-1430">
 </head>
 <body>
     <div class="app-shell">
@@ -21,6 +21,11 @@
                 <button class="rail-link" type="button">Studio Library</button>
                 <button class="rail-link" type="button">Record</button>
             </nav>
+            <section class="rail-project-reminder" aria-label="Previous class project changes">
+                <div class="rail-project-name" id="railReminderProject">Tape Mural</div>
+                <div class="rail-reminder-label">Project Changes</div>
+                <div class="rail-reminder-text" id="railReminderChanges">No project changes</div>
+            </section>
             <nav class="rail-nav rail-nav-bottom">
                 <button class="rail-link" id="navSetup" type="button">Setup</button>
             </nav>
@@ -72,9 +77,15 @@
                         <p class="project-title" id="projectTitle">Tape Mural</p>
                         <p class="project-subtitle">Current project</p>
                     </div>
-                    <div class="project-milestone">
-                        <span>Next milestone:</span>
-                        <strong id="projectMilestone">Reflection due Monday</strong>
+                    <div class="project-context-right">
+                        <div class="project-milestone">
+                            <span>Next milestone:</span>
+                            <strong id="projectMilestone">Reflection due Monday</strong>
+                        </div>
+                        <div class="previous-eval-reminders" aria-label="Previous class evaluation reminders">
+                            <div><span>Overall Understanding:</span> <strong id="previousOverallUnderstanding">—</strong></div>
+                            <div class="concepts-reminder"><span>Concepts to Review</span><strong id="previousConceptsToReview">—</strong></div>
+                        </div>
                     </div>
                 </section>
 
@@ -98,6 +109,7 @@
                                     <th>Attendance</th>
                                     <th>Project Stage</th>
                                     <th>Status</th>
+                                    <th>Homework</th>
                                     <th>Last Class Note</th>
                                     <th>Follow-up</th>
                                 </tr>
@@ -113,13 +125,13 @@
                         <div class="class-eval-body hidden" id="classEvalBody">
                             <div class="class-eval-grid">
                                 <div>
-                                    <label for="evalClassStatus">Class Status</label>
+                                    <label for="evalClassStatus">Class Pace</label>
                                     <select id="evalClassStatus">
                                         <option value="">—</option>
-                                        <option value="Excellent">Excellent</option>
-                                        <option value="Good">Good</option>
-                                        <option value="Mixed">Mixed</option>
-                                        <option value="Challenging">Challenging</option>
+                                        <option value="Ahead of Schedule">Ahead of Schedule</option>
+                                        <option value="On Schedule">On Schedule</option>
+                                        <option value="Slightly Behind">Slightly Behind</option>
+                                        <option value="Behind Schedule">Behind Schedule</option>
                                     </select>
                                 </div>
                                 <div>
@@ -153,6 +165,10 @@
                 <details>
                     <summary>Experimental Tools</summary>
                     <div class="experimental-actions">
+                        <button id="exportPilotBackupBtn" type="button">Export Pilot Backup</button>
+                        <button id="restorePilotBackupBtn" type="button">Restore Pilot Backup</button>
+                        <button id="restoreLatestBackupBtn" type="button">Restore Latest Automatic Backup</button>
+                        <input id="restorePilotBackupInput" class="hidden" type="file" accept=".json,application/json">
                         <button id="resetCurrentClassBtn" type="button">Reset Current Class Test Data</button>
                         <button id="resetAllDataBtn" type="button">Reset All Pilot Data</button>
                     </div>
@@ -311,6 +327,6 @@
     </div>
 
     <script src="data.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=20260828-1545"></script>
 </body>
 </html>

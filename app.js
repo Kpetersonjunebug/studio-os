@@ -1,6 +1,8 @@
 class StudioOSApp {
     constructor() {
         this.storageKey = "studioOS_pilot_v3_followups";
+        this.backupStorageKey = "studioOS_pilot_backup_latest";
+        this.backupSchema = "studio-os-pilot-backup-v1";
         this.legacyStorageKeys = ["studioOS_pilot_v2_setup", "studioOS_pilot_v1", "studioOS_students"];
         this.state = null;
         this.selectedStudentByClassDate = {};
@@ -8,6 +10,7 @@ class StudioOSApp {
         this.rosterImportResult = null;
         this.rosterCollapsed = false;
         this.classEvalCollapsed = true;
+        this.classEvalBodyMarkup = document.getElementById("classEvalBody")?.innerHTML || "";
         this.page = "today";
         this.setupOpenSection = "classes";
         this.init();
@@ -23,11 +26,14 @@ class StudioOSApp {
         const raw = localStorage.getItem(this.storageKey);
         if (raw) {
             try {
-                this.state = this.normalizeState(JSON.parse(raw));
+                const parsedState = JSON.parse(raw);
+                const preservePreMigration = (Number(parsedState.followUpReconciliationVersion) || 0) < 1;
+                if (preservePreMigration) this.saveBackupSnapshot(parsedState, "pre-migration");
+                this.state = this.normalizeState(parsedState);
                 this.regenerateAllClassDates();
                 this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
                 this.reconcileLegacyFollowUps();
-                this.saveState();
+                this.saveState(!preservePreMigration);
                 return;
             } catch (err) {
                 console.error("Failed to parse current state, attempting legacy migration.", err);
@@ -41,10 +47,83 @@ class StudioOSApp {
         this.saveState();
     }
 
-    saveState() {
-        localStorage.setItem(this.storageKey, JSON.stringify(this.state));
+    saveState(updateBackup = true) {
+        const serialized = JSON.stringify(this.state);
+        localStorage.setItem(this.storageKey, serialized);
+        if (updateBackup) this.saveBackupSnapshot(this.state, "automatic");
     }
 
+    isValidPilotState(state) {
+        return !!state && typeof state === "object" &&
+            !!state.academicCalendar && typeof state.academicCalendar === "object" &&
+            Array.isArray(state.classes) &&
+            Array.isArray(state.followUps) &&
+            state.classes.every((cls) => cls && typeof cls.id === "string" && Array.isArray(cls.roster) && Array.isArray(cls.dates));
+    }
+
+    createBackupEnvelope(state, reason = "manual") {
+        return {
+            schema: this.backupSchema,
+            createdAt: new Date().toISOString(),
+            reason,
+            state,
+        };
+    }
+
+    saveBackupSnapshot(state, reason = "automatic") {
+        if (!this.isValidPilotState(state)) return false;
+        try {
+            const envelope = this.createBackupEnvelope(state, reason);
+            localStorage.setItem(this.backupStorageKey, JSON.stringify(envelope));
+            return true;
+        } catch (err) {
+            console.error("Unable to save Studio OS backup snapshot.", err);
+            return false;
+        }
+    }
+
+    parseBackupEnvelope(value) {
+        const envelope = typeof value === "string" ? JSON.parse(value) : value;
+        if (!envelope || envelope.schema !== this.backupSchema || !this.isValidPilotState(envelope.state)) {
+            throw new Error("This file is not a valid Studio OS pilot backup.");
+        }
+        return envelope;
+    }
+
+    backupFilename() {
+        const now = new Date();
+        const pad = (value) => String(value).padStart(2, "0");
+        return `Studio-OS-Pilot-Backup_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.json`;
+    }
+
+    exportPilotBackup() {
+        if (!this.isValidPilotState(this.state)) {
+            window.alert("The current Studio OS pilot state is not valid and cannot be exported.");
+            return;
+        }
+        const json = JSON.stringify(this.createBackupEnvelope(this.state, "manual-export"), null, 2);
+        const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = this.backupFilename();
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    restorePilotState(backupState) {
+        if (!this.isValidPilotState(backupState)) throw new Error("The backup does not contain a valid Studio OS pilot state.");
+        this.saveBackupSnapshot(this.state, "pre-restore");
+        this.state = this.normalizeState(JSON.parse(JSON.stringify(backupState)));
+        this.regenerateAllClassDates();
+        this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
+        this.reconcileLegacyFollowUps();
+        this.selectedStudentByClassDate = {};
+        this.ensureSelectedStudent(true);
+        this.saveState(false);
+        this.render();
+    }
     createInitialState() {
         const classDefs = [
             {
@@ -174,6 +253,12 @@ class StudioOSApp {
                 roster,
                 nextStudentId: roster.length + 1,
                 syllabus: def.syllabus,
+                classEvaluation: {
+                    classPace: "On Schedule",
+                    overallUnderstanding: "Adequate",
+                    conceptsToReview: "",
+                    projectChanges: "",
+                },
                 projects,
                 currentProjectId: projects[0].id,
                 dates,
@@ -219,6 +304,7 @@ class StudioOSApp {
             delete classObj.firstClassDate;
             classObj.currentProjectId = classObj.currentProjectId || (classObj.projects[0] ? classObj.projects[0].id : null);
             classObj.dates = this.normalizeDates(c.dates, f.dates, classObj.roster);
+            classObj.classEvaluation = this.normalizeStickyClassEvaluation(c.classEvaluation, classObj.dates);
             this.syncClassRosterWithDates(classObj);
             return classObj;
         });
@@ -310,6 +396,37 @@ class StudioOSApp {
             overallUnderstanding: existing?.overallUnderstanding || "",
             conceptsToReview: existing?.conceptsToReview || "",
             projectChanges: existing?.projectChanges || "",
+        };
+    }
+
+    normalizeStickyClassEvaluation(existing, dates = []) {
+        const historical = dates
+            .filter((d) => d.isInstructional !== false && d.classEvaluation)
+            .filter((d) => Object.values(d.classEvaluation).some((value) => String(value || "").trim()))
+            .sort((a, b) => String(b.dateISO || "").localeCompare(String(a.dateISO || "")))[0]?.classEvaluation || null;
+        const source = existing && typeof existing === "object" ? existing : null;
+        const has = (key) => !!source && Object.prototype.hasOwnProperty.call(source, key);
+        const legacyPace = has("classStatus") ? source.classStatus : historical?.classStatus;
+        const paceMap = {
+            Excellent: "Ahead of Schedule",
+            Good: "On Schedule",
+            Mixed: "Slightly Behind",
+            Challenging: "Behind Schedule",
+        };
+
+        return {
+            classPace: has("classPace")
+                ? source.classPace
+                : (paceMap[legacyPace] || legacyPace || "On Schedule"),
+            overallUnderstanding: has("overallUnderstanding")
+                ? source.overallUnderstanding
+                : (historical?.overallUnderstanding || "Adequate"),
+            conceptsToReview: has("conceptsToReview")
+                ? source.conceptsToReview
+                : (historical?.conceptsToReview || ""),
+            projectChanges: has("projectChanges")
+                ? source.projectChanges
+                : (historical?.projectChanges || ""),
         };
     }
 
@@ -524,6 +641,28 @@ class StudioOSApp {
         const idx = this.currentDateIndex();
         if (!cls || !cls.dates || cls.dates.length === 0) return null;
         return cls.dates[Math.max(0, Math.min(idx, cls.dates.length - 1))];
+    }
+
+    todayDateIndexForClass(cls) {
+        const dates = cls?.dates || [];
+        if (dates.length === 0) return 0;
+
+        const todayISO = this.toISO(new Date());
+        const exactTodayIndex = dates.findIndex((date) => date.dateISO === todayISO);
+        if (exactTodayIndex >= 0) return exactTodayIndex;
+
+        const nextClassIndex = dates.findIndex((date) => date.isInstructional !== false && date.dateISO > todayISO);
+        if (nextClassIndex >= 0) return nextClassIndex;
+
+        for (let index = dates.length - 1; index >= 0; index -= 1) {
+            if (dates[index].isInstructional !== false && dates[index].dateISO < todayISO) return index;
+        }
+        return 0;
+    }
+
+    selectTodayDateForClass(cls) {
+        if (!cls) return;
+        this.state.selectedDateIndexByClass[cls.id] = this.todayDateIndexForClass(cls);
     }
 
     currentStudents() {
@@ -756,6 +895,7 @@ class StudioOSApp {
 
         document.getElementById("classSelect").addEventListener("change", (e) => {
             this.state.selectedClassId = e.target.value;
+            this.selectTodayDateForClass(this.currentClass());
             this.ensureSelectedStudent(true);
             this.saveState();
             this.render();
@@ -766,10 +906,47 @@ class StudioOSApp {
         document.getElementById("todayDateBtn").addEventListener("click", () => {
             const cls = this.currentClass();
             if (!cls) return;
-            this.state.selectedDateIndexByClass[cls.id] = Math.min(1, Math.max(cls.dates.length - 1, 0));
+            this.selectTodayDateForClass(cls);
             this.ensureSelectedStudent(true);
             this.saveState();
             this.render();
+        });
+
+        const restoreInput = document.getElementById("restorePilotBackupInput");
+        document.getElementById("exportPilotBackupBtn").addEventListener("click", () => this.exportPilotBackup());
+        document.getElementById("restorePilotBackupBtn").addEventListener("click", () => restoreInput.click());
+        restoreInput.addEventListener("change", () => {
+            const file = restoreInput.files?.[0];
+            restoreInput.value = "";
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const envelope = this.parseBackupEnvelope(String(reader.result || ""));
+                    if (!window.confirm("Restore this Studio OS backup?\n\nThis will replace the CURRENT local pilot data on this browser.")) return;
+                    this.restorePilotState(envelope.state);
+                    window.alert("Studio OS pilot backup restored.");
+                } catch (err) {
+                    window.alert(err.message || "This file is not a valid Studio OS pilot backup.");
+                }
+            };
+            reader.onerror = () => window.alert("The selected backup file could not be read.");
+            reader.readAsText(file);
+        });
+        document.getElementById("restoreLatestBackupBtn").addEventListener("click", () => {
+            try {
+                const rawBackup = localStorage.getItem(this.backupStorageKey);
+                if (!rawBackup) {
+                    window.alert("No valid automatic Studio OS backup is available.");
+                    return;
+                }
+                const envelope = this.parseBackupEnvelope(rawBackup);
+                if (!window.confirm("Restore the latest automatic Studio OS backup?\n\nThis will replace the CURRENT local pilot data on this browser.")) return;
+                this.restorePilotState(envelope.state);
+                window.alert("Latest automatic Studio OS backup restored.");
+            } catch (_) {
+                window.alert("No valid automatic Studio OS backup is available.");
+            }
         });
 
         document.getElementById("resetCurrentClassBtn").addEventListener("click", () => {
@@ -783,7 +960,7 @@ class StudioOSApp {
             this.state.classes[idx] = replacement;
             this.regenerateClassDates(this.state.classes[idx], true);
             this.state.followUps = retainedFollowUps;
-            this.state.selectedDateIndexByClass[cls.id] = Math.min(1, Math.max(this.state.classes[idx].dates.length - 1, 0));
+            this.selectTodayDateForClass(this.state.classes[idx]);
             this.ensureSelectedStudent(true);
             this.saveState();
             this.render();
@@ -901,6 +1078,10 @@ class StudioOSApp {
             document.getElementById("classWeek").textContent = "No meeting dates";
             document.getElementById("projectTitle").textContent = "No active project";
             document.getElementById("projectMilestone").textContent = "Not set";
+            document.getElementById("previousOverallUnderstanding").textContent = "—";
+            document.getElementById("previousConceptsToReview").textContent = "—";
+            document.getElementById("railReminderProject").textContent = "No active project";
+            document.getElementById("railReminderChanges").textContent = "No project changes";
             return;
         }
         select.innerHTML = this.state.classes.map((c) => `<option value="${c.id}" ${c.id === cls.id ? "selected" : ""}>${c.code} · ${c.name}</option>`).join("");
@@ -910,7 +1091,10 @@ class StudioOSApp {
         const cur = dates.length ? dates[Math.max(0, Math.min(idx, dates.length - 1))] : null;
         const prev = cur ? dates[Math.max(0, Math.min(idx - 1, dates.length - 1))] : null;
         const next = cur ? dates[Math.max(0, Math.min(idx + 1, dates.length - 1))] : null;
-        const curLabel = cur ? (cur.isInstructional === false ? `${cur.date} (today · NO CLASS)` : `${cur.date} (today)`) : "No generated class meetings in selected range.";
+        const isToday = cur?.dateISO === this.toISO(new Date());
+        const curLabel = cur
+            ? `${cur.date} (${isToday ? "today" : "current"}${cur.isInstructional === false ? " · NO CLASS" : ""})`
+            : "No generated class meetings in selected range.";
         const prevText = prev ? prev.date : "None";
         const nextText = next ? next.date : "None";
         document.getElementById("dateContext").textContent = cur ? `${prevText} (prev) · ${curLabel} · ${nextText} (next)` : "No generated class meetings in selected range.";
@@ -925,6 +1109,11 @@ class StudioOSApp {
             : `No meeting dates · ${cls.meetingDays.join(" / ")}`;
         document.getElementById("projectTitle").textContent = project ? project.name : "No active project";
         document.getElementById("projectMilestone").textContent = project?.nextMilestone || "Not set";
+        const currentEvaluation = cls.classEvaluation || this.normalizeStickyClassEvaluation(null);
+        document.getElementById("previousOverallUnderstanding").textContent = currentEvaluation.overallUnderstanding || "—";
+        document.getElementById("previousConceptsToReview").textContent = currentEvaluation.conceptsToReview || "—";
+        document.getElementById("railReminderProject").textContent = project?.name || "No active project";
+        document.getElementById("railReminderChanges").textContent = currentEvaluation.projectChanges || "No project changes";
     }
 
     renderSummary(dueFollowUps = this.getDueFollowUpsForTodayCurrentClass()) {
@@ -1000,6 +1189,18 @@ class StudioOSApp {
         return "tag tag-developing";
     }
 
+    homeworkTagClass(status) {
+        if (status === "Done") return "tag tag-strong";
+        if (status === "Not Done") return "tag tag-needs-help";
+        return "tag tag-developing";
+    }
+
+    nextHomeworkValue(value) {
+        if (value === "Done") return "Partial";
+        if (value === "Partial") return "Not Done";
+        return "Done";
+    }
+
     followTagClass(status) {
         if (status === "Next Class") return "tag tag-followup";
         if (status === "Complete") return "tag tag-strong";
@@ -1041,11 +1242,11 @@ class StudioOSApp {
         const tbody = document.getElementById("studentTableBody");
         const date = this.currentDateRecord();
         if (!date) {
-            tbody.innerHTML = '<tr><td colspan="6">No class date available.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7">No class date available.</td></tr>';
             return;
         }
         if (date.isInstructional === false) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px 8px;">${this.escapeHtml(date.date)}<br><strong>NO CLASS — ${this.escapeHtml(date.exceptionDescription || date.exceptionType || "Scheduled exception")}</strong></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px 8px;">${this.escapeHtml(date.date)}<br><strong>NO CLASS — ${this.escapeHtml(date.exceptionDescription || date.exceptionType || "Scheduled exception")}</strong></td></tr>`;
             return;
         }
 
@@ -1068,6 +1269,7 @@ class StudioOSApp {
                     </select>
                 </td>
                 <td><button type="button" class="${this.statusTagClass(s.overallStatus)} table-chip-btn" data-table-status-id="${s.id}">${this.escapeHtml(s.overallStatus)}</button></td>
+                <td class="homework-status"><button type="button" class="${this.homeworkTagClass(s.outsideWork)} table-chip-btn" data-table-homework-id="${s.id}" title="Click to change homework status" aria-label="Change homework status for ${this.escapeHtml(this.rosterDisplayName(s.name))}">${this.escapeHtml(s.outsideWork || "—")}</button></td>
                 <td class="last-note">${this.escapeHtml(previousNote)}</td>
                 <td><button type="button" class="${this.followTagClass(followStatus)} table-chip-btn" data-table-followup-id="${s.id}">${this.escapeHtml(followStatus)}</button></td>
             `;
@@ -1108,6 +1310,16 @@ class StudioOSApp {
                 const studentId = Number(el.getAttribute("data-table-status-id"));
                 applyAndRefresh(studentId, (student) => {
                     student.overallStatus = this.nextOverallStatusValue(student.overallStatus);
+                });
+            });
+        });
+
+        tbody.querySelectorAll("[data-table-homework-id]").forEach((el) => {
+            el.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const studentId = Number(el.getAttribute("data-table-homework-id"));
+                applyAndRefresh(studentId, (student) => {
+                    student.outsideWork = this.nextHomeworkValue(student.outsideWork);
                 });
             });
         });
@@ -1202,20 +1414,6 @@ class StudioOSApp {
                     <div>
                         <label for="classNote">Class Note</label>
                         <textarea id="classNote" data-field="classNote" rows="4">${this.escapeHtml(student.classNote || "")}</textarea>
-                    </div>
-                    <div class="row-two">
-                        <div>
-                            <label for="panelProgress">Progress</label>
-                            <select id="panelProgress" data-field="progress">
-                                ${this.options(PROGRESS_OPTIONS, student.progress || "")}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="panelOutsideWork">Outside Work</label>
-                            <select id="panelOutsideWork" data-field="outsideWork">
-                                ${this.options(OUTSIDE_WORK_OPTIONS, student.outsideWork || "")}
-                            </select>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1322,21 +1520,28 @@ class StudioOSApp {
             return;
         }
 
-        const eval_ = date.classEvaluation || this.normalizeClassEvaluation(null);
+        if (!document.getElementById("evalClassStatus")) {
+            bodyEl.innerHTML = this.classEvalBodyMarkup;
+        }
 
-        document.getElementById("evalClassStatus").value = eval_.classStatus || "";
+        const cls = this.currentClass();
+        if (!cls) return;
+        if (!cls.classEvaluation) cls.classEvaluation = this.normalizeStickyClassEvaluation(null);
+        const eval_ = cls.classEvaluation;
+
+        document.getElementById("evalClassStatus").value = eval_.classPace || "On Schedule";
         document.getElementById("evalOverallUnderstanding").value = eval_.overallUnderstanding || "";
         document.getElementById("evalConceptsToReview").value = eval_.conceptsToReview || "";
         document.getElementById("evalProjectChanges").value = eval_.projectChanges || "";
 
         const saveEval = () => {
-            const d = this.currentDateRecord();
-            if (!d || d.isInstructional === false) return;
-            if (!d.classEvaluation) d.classEvaluation = this.normalizeClassEvaluation(null);
-            d.classEvaluation.classStatus = document.getElementById("evalClassStatus").value;
-            d.classEvaluation.overallUnderstanding = document.getElementById("evalOverallUnderstanding").value;
-            d.classEvaluation.conceptsToReview = document.getElementById("evalConceptsToReview").value;
-            d.classEvaluation.projectChanges = document.getElementById("evalProjectChanges").value;
+            const currentClass = this.currentClass();
+            if (!currentClass) return;
+            if (!currentClass.classEvaluation) currentClass.classEvaluation = this.normalizeStickyClassEvaluation(null);
+            currentClass.classEvaluation.classPace = document.getElementById("evalClassStatus").value;
+            currentClass.classEvaluation.overallUnderstanding = document.getElementById("evalOverallUnderstanding").value;
+            currentClass.classEvaluation.conceptsToReview = document.getElementById("evalConceptsToReview").value;
+            currentClass.classEvaluation.projectChanges = document.getElementById("evalProjectChanges").value;
             this.saveState();
         };
 
@@ -1653,6 +1858,12 @@ class StudioOSApp {
                 roster: [],
                 nextStudentId: 1,
                 syllabus: { title: "", notes: "" },
+                classEvaluation: {
+                    classPace: "On Schedule",
+                    overallUnderstanding: "Adequate",
+                    conceptsToReview: "",
+                    projectChanges: "",
+                },
                 projects: [{ id: `${id}-p1`, name: "New Project", startDate: "", dueDate: "", nextMilestone: "", notes: "" }],
                 currentProjectId: `${id}-p1`,
                 dates: [],

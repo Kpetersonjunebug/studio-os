@@ -113,7 +113,7 @@ class StudioOSApp {
         try {
             const user = await this.cloudSync.initialize();
             this.renderCloudSyncControls();
-            if (user) await this.syncClassesAndStudents();
+            if (user) await this.syncClassesAndStudents(false);
         } catch (err) {
             console.error("Studio OS cloud initialization failed; continuing locally.", err);
             this.updateCloudSyncStatus("error", "Cloud unavailable — working locally");
@@ -123,7 +123,7 @@ class StudioOSApp {
     scheduleCloudRosterSync() {
         if (!this.cloudSync?.user || this.cloudSyncBusy) return;
         window.clearTimeout(this.cloudSyncTimer);
-        this.cloudSyncTimer = window.setTimeout(() => this.syncClassesAndStudents(), 900);
+        this.cloudSyncTimer = window.setTimeout(() => this.syncClassesAndStudents(false), 900);
     }
 
     createCloudClassShell(id) {
@@ -161,7 +161,7 @@ class StudioOSApp {
         this.render();
     }
 
-    async syncClassesAndStudents() {
+    async syncClassesAndStudents(allowProjectBootstrap = false) {
         if (!this.cloudSync?.user || this.cloudSyncBusy) return;
         this.cloudSyncBusy = true;
         this.updateCloudSyncStatus("syncing", "Syncing Classes, Students + Projects…");
@@ -182,6 +182,11 @@ class StudioOSApp {
 
             if (!remoteProjectsInitialized) {
                 const bootstrapSnapshot = window.StudioOSCloudSync.buildProjectBootstrapSnapshot(localSnapshot, remoteSnapshot);
+                if (!allowProjectBootstrap) {
+                    this.applyCloudRosterSnapshot(bootstrapSnapshot);
+                    this.updateCloudSyncStatus("ready", "Projects not online yet — use Sync now on your primary computer");
+                    return true;
+                }
                 await this.cloudSync.pushSnapshot(bootstrapSnapshot);
                 this.applyCloudRosterSnapshot(bootstrapSnapshot);
                 this.saveCloudSyncFingerprint(window.StudioOSCloudSync.canonicalSnapshot(bootstrapSnapshot));
@@ -1064,7 +1069,7 @@ class StudioOSApp {
                 this.updateCloudSyncStatus("error", "Could not send sign-in link");
             }
         });
-        document.getElementById("cloudSyncNowBtn").addEventListener("click", () => this.syncClassesAndStudents());
+        document.getElementById("cloudSyncNowBtn").addEventListener("click", () => this.syncClassesAndStudents(true));
         document.getElementById("cloudSyncSignOutBtn").addEventListener("click", async () => {
             if (!this.cloudSync) return;
             try {
@@ -2587,7 +2592,7 @@ class StudioOSApp {
                 try {
                     project.brief = await this.cloudSync.uploadProjectBrief(cls.id, project.id, file);
                     this.saveState(true, false);
-                    const synced = await this.syncClassesAndStudents();
+                    const synced = await this.syncClassesAndStudents(true);
                     if (!synced) {
                         window.alert("The brief was uploaded and saved locally, but cloud sync is paused. Your previous brief was kept as a safety copy.");
                         this.renderSetupProjects();
@@ -2638,7 +2643,7 @@ class StudioOSApp {
                 const previousBrief = { ...project.brief };
                 project.brief = null;
                 this.saveState(true, false);
-                const synced = await this.syncClassesAndStudents();
+                const synced = await this.syncClassesAndStudents(true);
                 if (!synced) {
                     project.brief = previousBrief;
                     this.saveState(true, false);

@@ -28,11 +28,12 @@ The preserved baseline is commit `7d91a57` on `experimental-pilot`. It captures 
 ## Phase 2 Projects + Project Briefs
 
 1. Project names, dates, milestones, notes, order, and current-project selection join the existing conflict-safe snapshot.
-2. The first updated device initializes cloud Projects without overwriting its local project data.
-3. Project Brief files upload to a private Supabase Storage bucket.
-4. Each file path begins with the signed-in user's ID and Storage RLS limits select, insert, update, and delete to that user.
-5. PDF, Word, RTF, text, and ODT files up to 15 MB are accepted.
-6. Attachment metadata remains in local backups and syncs with its Project record.
+2. Automatic startup sync will not initialize Projects. The user must choose **Sync now** on the primary computer, preventing an older browser from becoming the accidental Project source.
+3. Project initialization preserves the existing cloud Classes + Students and adds only matching local Project data.
+4. Project Brief files upload to a private Supabase Storage bucket.
+5. Each file path begins with the signed-in user's ID and Storage RLS limits select, insert, update, and delete to that user.
+6. PDF, Word, RTF, text, and ODT files up to 15 MB are accepted.
+7. Attachment metadata remains in local backups and syncs with its Project record.
 
 ## Verification gates
 

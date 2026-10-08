@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Studio OS V2.5 - Today</title>
-    <link rel="stylesheet" href="styles.css?v=20261008-project-sync-briefs-v3">
+    <link rel="stylesheet" href="styles.css?v=20261008-class-evaluation-v4">
 </head>
 <body>
     <div class="app-shell">
@@ -94,7 +94,7 @@
                         </div>
                         <div class="previous-eval-reminders" aria-label="Previous class evaluation reminders">
                             <div><span>Overall Understanding:</span> <strong id="previousOverallUnderstanding">—</strong></div>
-                            <div class="concepts-reminder"><span>Concepts to Review</span><strong id="previousConceptsToReview">—</strong></div>
+                            <div class="concepts-reminder"><span>For Next Class from Previous Class</span><strong id="previousConceptsToReview">—</strong></div>
                         </div>
                     </div>
                 </section>
@@ -155,8 +155,8 @@
                                 </div>
                             </div>
                             <div>
-                                <label for="evalConceptsToReview">Concepts to Review</label>
-                                <textarea id="evalConceptsToReview" rows="2" placeholder="Topics or skills to revisit next class…"></textarea>
+                                <label for="evalConceptsToReview">For Next Class</label>
+                                <textarea id="evalConceptsToReview" rows="2" placeholder="Topics, skills, or reminders for the next class…"></textarea>
                             </div>
                             <div>
                                 <label for="evalProjectChanges">Project Changes</label>
@@ -338,8 +338,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="supabase-config.js"></script>
-    <script src="supabase-sync.js?v=20261008-project-sync-briefs-v3"></script>
+    <script src="supabase-sync.js?v=20261008-class-evaluation-v4"></script>
     <script src="data.js"></script>
-    <script src="app.js?v=20261008-project-sync-briefs-v3"></script>
+    <script src="app.js?v=20261008-class-evaluation-v4"></script>
 </body>
 </html>

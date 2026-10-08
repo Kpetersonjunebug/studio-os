@@ -441,6 +441,7 @@ class StudioOSApp {
         return {
             selectedClassId: classes[0].id,
             selectedDateIndexByClass: Object.fromEntries(classes.map((c) => [c.id, 1])),
+            classEvaluationPerDateVersion: 1,
             academicCalendar: {
                 semesterName: "Fall 2026",
                 semesterStartDate: "2026-08-24",
@@ -505,9 +506,22 @@ class StudioOSApp {
             };
         });
 
+        const selectedDateIndexByClass = state.selectedDateIndexByClass || fallback.selectedDateIndexByClass;
+        if ((Number(state.classEvaluationPerDateVersion) || 0) < 1) {
+            classes.forEach((cls) => {
+                const hasDatedEvaluation = cls.dates.some((date) => this.hasClassEvaluationContent(date.classEvaluation));
+                if (hasDatedEvaluation || !this.hasClassEvaluationContent(cls.classEvaluation)) return;
+                const selectedIndex = selectedDateIndexByClass[cls.id] ?? this.todayDateIndexForClass(cls);
+                const selectedDate = cls.dates[Math.max(0, Math.min(selectedIndex, Math.max(cls.dates.length - 1, 0)))];
+                if (!selectedDate || selectedDate.isInstructional === false) return;
+                selectedDate.classEvaluation = this.normalizeClassEvaluation(cls.classEvaluation);
+            });
+        }
+
         return {
             selectedClassId: state.selectedClassId || classes[0].id,
-            selectedDateIndexByClass: state.selectedDateIndexByClass || fallback.selectedDateIndexByClass,
+            selectedDateIndexByClass,
+            classEvaluationPerDateVersion: 1,
             academicCalendar: {
                 ...fallback.academicCalendar,
                 ...(state.academicCalendar || {}),
@@ -571,12 +585,25 @@ class StudioOSApp {
     }
 
     normalizeClassEvaluation(existing) {
+        const legacyPace = existing?.classPace || existing?.classStatus || "";
+        const paceMap = {
+            Excellent: "Ahead of Schedule",
+            Good: "On Schedule",
+            Mixed: "Slightly Behind",
+            Challenging: "Behind Schedule",
+        };
         return {
-            classStatus: existing?.classStatus || "",
+            classPace: paceMap[legacyPace] || legacyPace,
             overallUnderstanding: existing?.overallUnderstanding || "",
             conceptsToReview: existing?.conceptsToReview || "",
             projectChanges: existing?.projectChanges || "",
         };
+    }
+
+    hasClassEvaluationContent(evaluation) {
+        if (!evaluation || typeof evaluation !== "object") return false;
+        return ["classPace", "classStatus", "overallUnderstanding", "conceptsToReview", "projectChanges"]
+            .some((key) => String(evaluation[key] || "").trim());
     }
 
     normalizeStickyClassEvaluation(existing, dates = []) {
@@ -586,7 +613,9 @@ class StudioOSApp {
             .sort((a, b) => String(b.dateISO || "").localeCompare(String(a.dateISO || "")))[0]?.classEvaluation || null;
         const source = existing && typeof existing === "object" ? existing : null;
         const has = (key) => !!source && Object.prototype.hasOwnProperty.call(source, key);
-        const legacyPace = has("classStatus") ? source.classStatus : historical?.classStatus;
+        const legacyPace = has("classPace")
+            ? source.classPace
+            : (has("classStatus") ? source.classStatus : (historical?.classPace || historical?.classStatus));
         const paceMap = {
             Excellent: "Ahead of Schedule",
             Good: "On Schedule",
@@ -1312,9 +1341,11 @@ class StudioOSApp {
             : `No meeting dates · ${cls.meetingDays.join(" / ")}`;
         document.getElementById("projectTitle").textContent = project ? project.name : "No active project";
         document.getElementById("projectMilestone").textContent = project?.nextMilestone || "Not set";
-        const currentEvaluation = cls.classEvaluation || this.normalizeStickyClassEvaluation(null);
-        document.getElementById("previousOverallUnderstanding").textContent = currentEvaluation.overallUnderstanding || "—";
-        document.getElementById("previousConceptsToReview").textContent = currentEvaluation.conceptsToReview || "—";
+        const currentEvaluation = cur?.classEvaluation || this.normalizeClassEvaluation(null);
+        const previousDate = cur ? this.getPreviousInstructionalDateRecord(cls, cur.dateISO) : null;
+        const previousEvaluation = previousDate?.classEvaluation || this.normalizeClassEvaluation(null);
+        document.getElementById("previousOverallUnderstanding").textContent = previousEvaluation.overallUnderstanding || "—";
+        document.getElementById("previousConceptsToReview").textContent = previousEvaluation.conceptsToReview || "—";
         document.getElementById("railReminderProject").textContent = project?.name || "No active project";
         document.getElementById("railReminderChanges").textContent = currentEvaluation.projectChanges || "No project changes";
     }
@@ -1729,8 +1760,8 @@ class StudioOSApp {
 
         const cls = this.currentClass();
         if (!cls) return;
-        if (!cls.classEvaluation) cls.classEvaluation = this.normalizeStickyClassEvaluation(null);
-        const eval_ = cls.classEvaluation;
+        if (!date.classEvaluation) date.classEvaluation = this.normalizeClassEvaluation(null);
+        const eval_ = date.classEvaluation;
 
         document.getElementById("evalClassStatus").value = eval_.classPace || "On Schedule";
         document.getElementById("evalOverallUnderstanding").value = eval_.overallUnderstanding || "";
@@ -1738,13 +1769,13 @@ class StudioOSApp {
         document.getElementById("evalProjectChanges").value = eval_.projectChanges || "";
 
         const saveEval = () => {
-            const currentClass = this.currentClass();
-            if (!currentClass) return;
-            if (!currentClass.classEvaluation) currentClass.classEvaluation = this.normalizeStickyClassEvaluation(null);
-            currentClass.classEvaluation.classPace = document.getElementById("evalClassStatus").value;
-            currentClass.classEvaluation.overallUnderstanding = document.getElementById("evalOverallUnderstanding").value;
-            currentClass.classEvaluation.conceptsToReview = document.getElementById("evalConceptsToReview").value;
-            currentClass.classEvaluation.projectChanges = document.getElementById("evalProjectChanges").value;
+            const currentDate = this.currentDateRecord();
+            if (!currentDate || currentDate.isInstructional === false) return;
+            if (!currentDate.classEvaluation) currentDate.classEvaluation = this.normalizeClassEvaluation(null);
+            currentDate.classEvaluation.classPace = document.getElementById("evalClassStatus").value;
+            currentDate.classEvaluation.overallUnderstanding = document.getElementById("evalOverallUnderstanding").value;
+            currentDate.classEvaluation.conceptsToReview = document.getElementById("evalConceptsToReview").value;
+            currentDate.classEvaluation.projectChanges = document.getElementById("evalProjectChanges").value;
             this.saveState();
         };
 
@@ -2685,6 +2716,10 @@ class StudioOSApp {
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    window.studioOSApp = new StudioOSApp();
-});
+if (typeof document !== "undefined") {
+    document.addEventListener("DOMContentLoaded", () => {
+        window.studioOSApp = new StudioOSApp();
+    });
+}
+
+if (typeof module !== "undefined" && module.exports) module.exports = StudioOSApp;

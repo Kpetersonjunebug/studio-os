@@ -9,8 +9,9 @@ The preserved baseline is commit `7d91a57` on `experimental-pilot`. It captures 
 - The interface and existing domain model stay in place.
 - `localStorage` remains the first write and offline cache.
 - Existing backup/restore remains independent of Supabase.
-- Only class identity/details and roster membership sync in Phase 1.
-- Projects, critiques/evaluations, follow-ups, attendance, notes, dates, CSV import logic, and backup envelopes remain local.
+- Class identity/details and roster membership sync in Phase 1.
+- Project details, current-project selection, and private Project Brief files sync in Phase 2.
+- Critiques/evaluations, follow-ups, attendance, notes, dates, CSV import logic, and backup envelopes remain local.
 - Cloud access requires Supabase Auth and per-user Row Level Security.
 - The browser receives only a publishable key, never a secret or service-role key.
 - Class deletion is not propagated during Phase 1 because unmigrated class records could otherwise be lost on another device.
@@ -24,6 +25,15 @@ The preserved baseline is commit `7d91a57` on `experimental-pilot`. It captures 
 5. A three-way fingerprint comparison prevents silent overwrites when local and cloud both changed since the last successful sync.
 6. A visible Sync Now control allows recovery after going offline.
 
+## Phase 2 Projects + Project Briefs
+
+1. Project names, dates, milestones, notes, order, and current-project selection join the existing conflict-safe snapshot.
+2. The first updated device initializes cloud Projects without overwriting its local project data.
+3. Project Brief files upload to a private Supabase Storage bucket.
+4. Each file path begins with the signed-in user's ID and Storage RLS limits select, insert, update, and delete to that user.
+5. PDF, Word, RTF, text, and ODT files up to 15 MB are accepted.
+6. Attachment metadata remains in local backups and syncs with its Project record.
+
 ## Verification gates
 
 - Static JavaScript syntax and pure mapping tests pass.
@@ -36,7 +46,7 @@ The preserved baseline is commit `7d91a57` on `experimental-pilot`. It captures 
 
 ## Deferred work
 
-- Projects, critiques/evaluations, follow-ups, attendance, notes, and class dates.
+- Critiques/evaluations, follow-ups, attendance, notes, and class dates.
 - Realtime subscriptions.
 - Student or TA accounts.
 - OpenAI features.

@@ -59,7 +59,7 @@ class StudioOSApp {
     }
 
     cloudSyncMetaKey() {
-        return this.cloudSync?.user ? `studioOS_classes_students_sync_${this.cloudSync.user.id}` : "";
+        return this.cloudSync?.user ? `studioOS_classes_students_projects_sync_v2_${this.cloudSync.user.id}` : "";
     }
 
     readCloudSyncFingerprint() {
@@ -164,7 +164,7 @@ class StudioOSApp {
     async syncClassesAndStudents() {
         if (!this.cloudSync?.user || this.cloudSyncBusy) return;
         this.cloudSyncBusy = true;
-        this.updateCloudSyncStatus("syncing", "Syncing Classes + Students…");
+        this.updateCloudSyncStatus("syncing", "Syncing Classes, Students + Projects…");
         try {
             const localSnapshot = window.StudioOSCloudSync.buildSnapshot(this.state);
             const remoteSnapshot = await this.cloudSync.fetchSnapshot();
@@ -172,37 +172,40 @@ class StudioOSApp {
             const remoteFingerprint = window.StudioOSCloudSync.canonicalSnapshot(remoteSnapshot);
             const lastFingerprint = this.readCloudSyncFingerprint();
 
-            if (remoteSnapshot.length === 0) {
+            const remoteProjectsInitialized = remoteSnapshot.some((cls) => Number(cls.projectSyncVersion) >= 1);
+            if (remoteSnapshot.length === 0 || !remoteProjectsInitialized) {
                 await this.cloudSync.pushSnapshot(localSnapshot);
                 this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes + Students synced");
-                return;
+                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                return true;
             }
 
             if (!lastFingerprint || localFingerprint === lastFingerprint) {
                 this.applyCloudRosterSnapshot(remoteSnapshot);
                 this.saveCloudSyncFingerprint(remoteFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes + Students synced");
-                return;
+                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                return true;
             }
 
             if (remoteFingerprint === lastFingerprint) {
                 await this.cloudSync.pushSnapshot(localSnapshot);
                 this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes + Students synced");
-                return;
+                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                return true;
             }
 
             if (localFingerprint === remoteFingerprint) {
                 this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes + Students synced");
-                return;
+                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                return true;
             }
 
-            this.updateCloudSyncStatus("conflict", "Sync paused — Classes or Students changed on two devices");
+            this.updateCloudSyncStatus("conflict", "Sync paused — cloud data changed on two devices");
+            return false;
         } catch (err) {
-            console.error("Studio OS Classes + Students sync failed; local data is still saved.", err);
+            console.error("Studio OS cloud sync failed; local data is still saved.", err);
             this.updateCloudSyncStatus("error", "Cloud sync failed — local data is safe");
+            return false;
         } finally {
             this.cloudSyncBusy = false;
             this.renderCloudSyncControls();
@@ -525,6 +528,13 @@ class StudioOSApp {
             dueDate: p.dueDate || "",
             nextMilestone: p.nextMilestone || legacyMilestone || "",
             notes: p.notes || "",
+            brief: p.brief?.storagePath ? {
+                storagePath: String(p.brief.storagePath),
+                fileName: String(p.brief.fileName || "Project brief"),
+                contentType: String(p.brief.contentType || "application/octet-stream"),
+                size: Number(p.brief.size) || 0,
+                uploadedAt: String(p.brief.uploadedAt || ""),
+            } : null,
         }));
         if (!normalized.some((p) => p.id === legacyClass.currentProjectId) && normalized.length > 0) {
             legacyClass.currentProjectId = normalized[0].id;
@@ -2505,6 +2515,14 @@ class StudioOSApp {
                 <div class="setup-grid setup-grid-1">
                     <div><textarea data-proj-id="${p.id}" data-proj-field="notes">${this.escapeHtml(p.notes || "")}</textarea></div>
                 </div>
+                <div class="project-brief-row">
+                    <div class="project-brief-name">${p.brief ? `Project brief: ${this.escapeHtml(p.brief.fileName)}` : "No project brief attached"}</div>
+                    <div class="setup-actions">
+                        <input class="hidden" type="file" data-project-brief-input="${p.id}" accept=".pdf,.doc,.docx,.rtf,.txt,.odt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,application/vnd.oasis.opendocument.text">
+                        <button type="button" data-attach-project-brief="${p.id}" ${this.cloudSync?.user ? "" : "disabled"}>${p.brief ? "Replace" : "Attach"} Project Brief</button>
+                        ${p.brief ? `<button type="button" data-open-project-brief="${p.id}" ${this.cloudSync?.user ? "" : "disabled"}>Open Brief</button><button type="button" data-remove-project-brief="${p.id}" ${this.cloudSync?.user ? "" : "disabled"}>Remove Brief</button>` : ""}
+                    </div>
+                </div>
             `;
             host.appendChild(item);
         });
@@ -2541,6 +2559,93 @@ class StudioOSApp {
             });
         });
 
+        host.querySelectorAll("[data-attach-project-brief]").forEach((el) => {
+            el.addEventListener("click", () => {
+                const id = el.getAttribute("data-attach-project-brief");
+                host.querySelector(`[data-project-brief-input="${CSS.escape(id)}"]`)?.click();
+            });
+        });
+
+        host.querySelectorAll("[data-project-brief-input]").forEach((input) => {
+            input.addEventListener("change", async () => {
+                const id = input.getAttribute("data-project-brief-input");
+                const project = cls.projects.find((item) => item.id === id);
+                const file = input.files?.[0];
+                input.value = "";
+                if (!project || !file) return;
+                const previousBrief = project.brief ? { ...project.brief } : null;
+                this.updateCloudSyncStatus("syncing", "Uploading project brief…");
+                try {
+                    project.brief = await this.cloudSync.uploadProjectBrief(cls.id, project.id, file);
+                    this.saveState(true, false);
+                    const synced = await this.syncClassesAndStudents();
+                    if (!synced) {
+                        window.alert("The brief was uploaded and saved locally, but cloud sync is paused. Your previous brief was kept as a safety copy.");
+                        this.renderSetupProjects();
+                        return;
+                    }
+                    if (previousBrief?.storagePath && previousBrief.storagePath !== project.brief.storagePath) {
+                        try {
+                            await this.cloudSync.removeProjectBrief(previousBrief.storagePath);
+                        } catch (cleanupError) {
+                            console.warn("The replacement brief is synced, but the previous stored file could not be deleted.", cleanupError);
+                        }
+                    }
+                    this.renderSetupProjects();
+                } catch (err) {
+                    console.error("Unable to attach project brief.", err);
+                    project.brief = previousBrief;
+                    this.saveState(true, false);
+                    this.updateCloudSyncStatus("error", "Project brief upload failed — local data is safe");
+                    window.alert(err.message || "The project brief could not be attached.");
+                    this.renderSetupProjects();
+                }
+            });
+        });
+
+        host.querySelectorAll("[data-open-project-brief]").forEach((el) => {
+            el.addEventListener("click", async () => {
+                const id = el.getAttribute("data-open-project-brief");
+                const project = cls.projects.find((item) => item.id === id);
+                if (!project?.brief?.storagePath) return;
+                const preview = window.open("", "_blank");
+                try {
+                    const signedUrl = await this.cloudSync.createProjectBriefUrl(project.brief.storagePath);
+                    if (preview) preview.location.href = signedUrl;
+                    else window.location.href = signedUrl;
+                } catch (err) {
+                    if (preview) preview.close();
+                    console.error("Unable to open project brief.", err);
+                    window.alert(err.message || "The project brief could not be opened.");
+                }
+            });
+        });
+
+        host.querySelectorAll("[data-remove-project-brief]").forEach((el) => {
+            el.addEventListener("click", async () => {
+                const id = el.getAttribute("data-remove-project-brief");
+                const project = cls.projects.find((item) => item.id === id);
+                if (!project?.brief?.storagePath || !window.confirm(`Remove ${project.brief.fileName}?`)) return;
+                const previousBrief = { ...project.brief };
+                project.brief = null;
+                this.saveState(true, false);
+                const synced = await this.syncClassesAndStudents();
+                if (!synced) {
+                    project.brief = previousBrief;
+                    this.saveState(true, false);
+                    window.alert("The brief was not removed because cloud sync is paused.");
+                    this.renderSetupProjects();
+                    return;
+                }
+                try {
+                    await this.cloudSync.removeProjectBrief(previousBrief.storagePath);
+                } catch (err) {
+                    console.warn("Project brief metadata was removed, but the stored file could not be deleted.", err);
+                }
+                this.renderSetupProjects();
+            });
+        });
+
         document.getElementById("addProjectBtn").onclick = () => {
             const name = document.getElementById("projectName").value.trim();
             if (!name) return;
@@ -2552,6 +2657,7 @@ class StudioOSApp {
                 dueDate: document.getElementById("projectDue").value,
                 nextMilestone: document.getElementById("projectMilestoneInput").value.trim(),
                 notes: document.getElementById("projectNotes").value,
+                brief: null,
             });
             if (!cls.currentProjectId) cls.currentProjectId = id;
             document.getElementById("projectName").value = "";

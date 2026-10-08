@@ -1,6 +1,6 @@
 # Studio OS Web Test
 
-A standalone web application prototype for Studio OS. It remains fully local by default and can optionally sync Classes + Students through Supabase.
+A standalone web application prototype for Studio OS. It remains local-first and can optionally sync Classes, Students, Projects, and private Project Brief files through Supabase.
 
 ## Technology Stack
 - **Markup:** HTML5
@@ -36,12 +36,14 @@ python -m SimpleHTTPServer 8000
 - **Extensible:** Easy to add features and components
 - **Local-first:** All core behavior still works without a Supabase connection
 
-## Optional Classes + Students sync
+## Optional cloud sync
 
 1. Create a dedicated Supabase project.
 2. Apply `supabase/migrations/20261007000000_create_studio_classes_and_students.sql`.
-3. Put the project URL and a publishable key in `supabase-config.js`. Never use a secret or service-role key in browser code.
-4. Configure the deployed URL and local development URL as allowed Auth redirect URLs in Supabase.
-5. Serve the directory over HTTP, sign in by email, and choose **Sync now**.
+3. Apply `supabase/migrations/20261007163300_restrict_rls_auto_enable_execution.sql`.
+4. Apply `supabase/migrations/20261008000000_add_project_sync_and_brief_storage.sql`.
+5. Put the project URL and a publishable key in `supabase-config.js`. Never use a secret or service-role key in browser code.
+6. Configure the deployed URL and local development URL as allowed Auth redirect URLs in Supabase.
+7. Serve the directory over HTTP, sign in by email, and choose **Sync now**.
 
-All existing saves still go to `localStorage` first. If Supabase is unavailable or not configured, the app continues to work locally. See `MIGRATION_PLAN.md` for scope and safety limits.
+All data edits still go to `localStorage` first. Project Brief files require a signed-in Supabase session and are stored in a private bucket with per-user access policies. If Supabase is unavailable or not configured, the rest of the app continues to work locally. See `MIGRATION_PLAN.md` for scope and safety limits.

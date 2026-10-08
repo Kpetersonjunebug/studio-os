@@ -911,6 +911,13 @@ textarea:focus {
     background: #f2f5f2;
 }
 
+.setup-actions button:disabled,
+.setup-section button:disabled,
+.placeholder-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .placeholder-btn {
     color: var(--muted);
 }
@@ -929,6 +936,25 @@ textarea:focus {
 .project-item.current-project {
     border-color: #9fb3a4;
     background: #f4f8f5;
+}
+
+.project-brief-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 6px;
+    border-top: 1px solid #edf0ed;
+}
+
+.project-brief-name,
+.setup-hint {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.setup-hint {
+    margin: 8px 0 0;
 }
 
 .import-preview {

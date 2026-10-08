@@ -30,7 +30,7 @@
                 <button class="rail-link" id="navSetup" type="button">Setup</button>
             </nav>
             <section class="cloud-sync-panel" aria-label="Studio OS cloud sync">
-                <div class="cloud-sync-heading">Classes + Students</div>
+                <div class="cloud-sync-heading">Classes + Students + Projects</div>
                 <div id="cloudSyncStatus" class="cloud-sync-status status-local">Local only — Supabase is not configured</div>
                 <input id="cloudSyncEmail" type="email" autocomplete="email" placeholder="Email for sync" disabled>
                 <div class="cloud-sync-actions">
@@ -330,7 +330,7 @@
                     <div class="setup-grid setup-grid-1">
                     <div><textarea id="projectNotes" placeholder="Project brief / notes"></textarea></div>
                 </div>
-                    <button type="button" class="placeholder-btn">Attach Project Brief — Future Feature</button>
+                    <p class="setup-hint">Attach a private project brief from the project row above. PDF, Word, RTF, text, and ODT files up to 15 MB are supported.</p>
                 </div>
             </section>
         </main>
@@ -340,6 +340,6 @@
     <script src="supabase-config.js"></script>
     <script src="supabase-sync.js"></script>
     <script src="data.js"></script>
-    <script src="app.js?v=20261007-classes-students-sync"></script>
+    <script src="app.js?v=20261008-project-sync-briefs"></script>
 </body>
 </html>

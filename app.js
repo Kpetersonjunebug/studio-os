@@ -1762,10 +1762,13 @@ class StudioOSApp {
         if (!cls) return;
         if (!date.classEvaluation) date.classEvaluation = this.normalizeClassEvaluation(null);
         const eval_ = date.classEvaluation;
+        const project = this.currentProject(cls);
 
         document.getElementById("evalClassStatus").value = eval_.classPace || "On Schedule";
         document.getElementById("evalOverallUnderstanding").value = eval_.overallUnderstanding || "";
         document.getElementById("evalConceptsToReview").value = eval_.conceptsToReview || "";
+        document.getElementById("evalNextMilestone").value = project?.nextMilestone || "";
+        document.getElementById("evalNextMilestone").disabled = !project;
         document.getElementById("evalProjectChanges").value = eval_.projectChanges || "";
 
         const saveEval = () => {
@@ -1787,6 +1790,13 @@ class StudioOSApp {
             const el = document.getElementById(id);
             if (el) { el.oninput = saveEval; }
         });
+        document.getElementById("evalNextMilestone").oninput = (event) => {
+            const currentProject = this.currentProject();
+            if (!currentProject) return;
+            currentProject.nextMilestone = event.target.value;
+            document.getElementById("projectMilestone").textContent = currentProject.nextMilestone.trim() || "Not set";
+            this.saveState();
+        };
     }
 
     // Follow-ups page

@@ -30,4 +30,21 @@ assert.equal(
 );
 assert.equal(app.getPreviousInstructionalDateRecord(cls, "2026-10-05"), null);
 
+assert.equal(
+    app.lastClassNoteText({ outsideWork: "Partial", classNote: "Review thumbnails" }),
+    "Homework: Partial · Review thumbnails"
+);
+assert.equal(
+    app.lastClassNoteText({ outsideWork: "Not Done", classNote: "" }),
+    "Homework: Not Done"
+);
+assert.equal(
+    app.lastClassNoteText({ outsideWork: "Done", classNote: "" }),
+    "—"
+);
+assert.equal(
+    app.lastClassNoteText({ outsideWork: "Done", classNote: "Strong progress" }),
+    "Strong progress"
+);
+
 console.log("Studio OS per-class-date evaluation tests passed.");

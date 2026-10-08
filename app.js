@@ -1435,6 +1435,17 @@ class StudioOSApp {
         return "Done";
     }
 
+    lastClassNoteText(previousStudent) {
+        if (!previousStudent) return "—";
+        const parts = [];
+        if (["Partial", "Not Done"].includes(previousStudent.outsideWork)) {
+            parts.push(`Homework: ${previousStudent.outsideWork}`);
+        }
+        const writtenNote = String(previousStudent.classNote || "").trim();
+        if (writtenNote) parts.push(writtenNote);
+        return parts.join(" · ") || "—";
+    }
+
     followTagClass(status) {
         if (status === "Next Class") return "tag tag-followup";
         if (status === "Complete") return "tag tag-strong";
@@ -1492,7 +1503,7 @@ class StudioOSApp {
         this.currentStudents().slice().sort((a, b) => this.compareStudentNames(a.name, b.name)).forEach((s) => {
             const tr = document.createElement("tr");
             tr.className = `student-row ${s.id === selectedId ? "selected" : ""}`;
-            const previousNote = previousStudentsById[s.id]?.classNote?.trim() || "—";
+            const previousNote = this.lastClassNoteText(previousStudentsById[s.id]);
             const followStatus = this.getFollowUpForStudent(cls.id, s.id, date.dateISO) ? "Next Class" : (s.followUp === "Complete" ? "Complete" : "None");
             tr.innerHTML = `
                 <td><strong>${this.escapeHtml(this.rosterDisplayName(s.name))}</strong></td>
@@ -1624,7 +1635,7 @@ class StudioOSApp {
                     <div>Status: <strong>${this.escapeHtml(previousStudent.overallStatus)}</strong></div>
                     <div>Progress: <strong>${this.escapeHtml(previousStudent.progress || "—")}</strong></div>
                     <div>Follow-up: <strong>${this.escapeHtml(prevFollowStatus)}</strong></div>
-                    <div style="grid-column: 1 / -1;">Note: <strong>${this.escapeHtml(previousStudent.classNote || "—")}</strong></div>
+                    <div style="grid-column: 1 / -1;">Note: <strong>${this.escapeHtml(this.lastClassNoteText(previousStudent))}</strong></div>
                 </div>
                </div>`
             : `<div class="panel-section panel-section-last-class"><div class="panel-section-label">Last Class</div><div style="font-size:12px;color:var(--muted);">No previous class record.</div></div>`;

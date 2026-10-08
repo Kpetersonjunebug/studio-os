@@ -98,6 +98,26 @@ class StudioOSCloudSync {
         })));
     }
 
+    static buildProjectBootstrapSnapshot(localSnapshot, remoteSnapshot) {
+        const localByClassId = new Map((localSnapshot || []).map((cls) => [cls.id, cls]));
+        return (remoteSnapshot || []).map((remoteClass) => {
+            const localClass = localByClassId.get(remoteClass.id);
+            const localProjects = localClass?.projects || [];
+            const localCurrentProjectId = localProjects.some((project) => project.id === localClass?.currentProjectId)
+                ? localClass.currentProjectId
+                : (localProjects[0]?.id || null);
+            return {
+                ...remoteClass,
+                projectSyncVersion: 1,
+                currentProjectId: localCurrentProjectId,
+                projects: localProjects.map((project) => ({
+                    ...project,
+                    brief: project.brief ? { ...project.brief } : null,
+                })),
+            };
+        });
+    }
+
     static mergeSnapshot(state, snapshot, createClass) {
         const localById = new Map((state.classes || []).map((cls) => [String(cls.id), cls]));
         const mergedClasses = [];

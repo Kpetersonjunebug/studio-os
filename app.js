@@ -173,9 +173,18 @@ class StudioOSApp {
             const lastFingerprint = this.readCloudSyncFingerprint();
 
             const remoteProjectsInitialized = remoteSnapshot.some((cls) => Number(cls.projectSyncVersion) >= 1);
-            if (remoteSnapshot.length === 0 || !remoteProjectsInitialized) {
+            if (remoteSnapshot.length === 0) {
                 await this.cloudSync.pushSnapshot(localSnapshot);
                 this.saveCloudSyncFingerprint(localFingerprint);
+                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                return true;
+            }
+
+            if (!remoteProjectsInitialized) {
+                const bootstrapSnapshot = window.StudioOSCloudSync.buildProjectBootstrapSnapshot(localSnapshot, remoteSnapshot);
+                await this.cloudSync.pushSnapshot(bootstrapSnapshot);
+                this.applyCloudRosterSnapshot(bootstrapSnapshot);
+                this.saveCloudSyncFingerprint(window.StudioOSCloudSync.canonicalSnapshot(bootstrapSnapshot));
                 this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
                 return true;
             }

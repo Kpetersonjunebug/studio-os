@@ -56,6 +56,23 @@ assert.deepEqual(snapshot, [{
     }],
 }]);
 
+const bootstrap = StudioOSCloudSync.buildProjectBootstrapSnapshot(snapshot, [{
+    id: "dsn100",
+    code: "CLOUD 100",
+    name: "Cloud Class",
+    meetingDays: ["Fri"],
+    sortOrder: 0,
+    projectSyncVersion: 0,
+    currentProjectId: null,
+    students: [{ id: 99, name: "Cloud Student", sortOrder: 0 }],
+    projects: [],
+}]);
+assert.equal(bootstrap[0].code, "CLOUD 100");
+assert.equal(bootstrap[0].students[0].name, "Cloud Student");
+assert.equal(bootstrap[0].projects[0].id, "keep-me");
+assert.equal(bootstrap[0].currentProjectId, "keep-me");
+assert.equal(bootstrap[0].projectSyncVersion, 1);
+
 StudioOSCloudSync.mergeSnapshot(state, [{
     id: "dsn100",
     code: "DSN 100A",

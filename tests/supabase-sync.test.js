@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const test = require("node:test");
 const StudioOSCloudSync = require("../supabase-sync.js");
 
 const state = {
@@ -107,5 +108,24 @@ assert.equal(
     StudioOSCloudSync.prototype.safeStorageSegment.call({}, "DSNI 125 / Project #1"),
     "DSNI-125-Project-1"
 );
+
+test("full-state fingerprints are stable across object key ordering", async () => {
+    const first = await StudioOSCloudSync.fingerprintFullState({
+        followUps: [{ id: 1, note: "Call next class" }],
+        classes: [{ id: "dsn100", dates: [{ attendance: "Present" }] }],
+    });
+    const reordered = await StudioOSCloudSync.fingerprintFullState({
+        classes: [{ dates: [{ attendance: "Present" }], id: "dsn100" }],
+        followUps: [{ note: "Call next class", id: 1 }],
+    });
+    const changed = await StudioOSCloudSync.fingerprintFullState({
+        classes: [{ dates: [{ attendance: "Absent" }], id: "dsn100" }],
+        followUps: [{ note: "Call next class", id: 1 }],
+    });
+
+    assert.match(first, /^[a-f0-9]{64}$/);
+    assert.equal(first, reordered);
+    assert.notEqual(first, changed);
+});
 
 console.log("Studio OS Classes, Students + Projects sync mapping tests passed.");

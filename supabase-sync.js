@@ -51,6 +51,72 @@ class StudioOSCloudSync {
         this.user = null;
     }
 
+    static canonicalFullState(state) {
+        const sortKeys = (value) => {
+            if (Array.isArray(value)) return value.map(sortKeys);
+            if (!value || typeof value !== "object") return value;
+            return Object.keys(value).sort().reduce((sorted, key) => {
+                sorted[key] = sortKeys(value[key]);
+                return sorted;
+            }, {});
+        };
+        return JSON.stringify(sortKeys(state || {}));
+    }
+
+    static async fingerprintFullState(state) {
+        const bytes = new TextEncoder().encode(StudioOSCloudSync.canonicalFullState(state));
+        const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async fetchFullState() {
+        if (!this.client || !this.user) throw new Error("Sign in before syncing.");
+        const { data, error } = await this.client
+            .from("studio_state_snapshots")
+            .select("revision, schema_version, state, content_hash, created_at")
+            .order("revision", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return null;
+        return {
+            revision: Number(data.revision),
+            schemaVersion: Number(data.schema_version) || 1,
+            state: data.state,
+            contentHash: data.content_hash,
+            createdAt: data.created_at,
+        };
+    }
+
+    async appendFullState(state, expectedRevision = 0, contentHash = "") {
+        if (!this.client || !this.user) throw new Error("Sign in before syncing.");
+        const revision = Number(expectedRevision) + 1;
+        const hash = contentHash || await StudioOSCloudSync.fingerprintFullState(state);
+        const { data, error } = await this.client
+            .from("studio_state_snapshots")
+            .insert({
+                user_id: this.user.id,
+                revision,
+                schema_version: 1,
+                state,
+                content_hash: hash,
+            })
+            .select("revision, schema_version, content_hash, created_at")
+            .single();
+        if (error) {
+            if (error.code === "23505") {
+                throw new Error("Cloud data changed while syncing. Review the two copies before trying again.");
+            }
+            throw error;
+        }
+        return {
+            revision: Number(data.revision),
+            schemaVersion: Number(data.schema_version) || 1,
+            contentHash: data.content_hash,
+            createdAt: data.created_at,
+        };
+    }
+
     static buildSnapshot(state) {
         return (state.classes || []).map((cls, classIndex) => ({
             id: String(cls.id),

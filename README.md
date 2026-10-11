@@ -1,6 +1,6 @@
 # Studio OS Web Test
 
-A standalone web application prototype for Studio OS. It remains local-first and can optionally sync Classes, Students, Projects, and private Project Brief files through Supabase.
+A standalone web application prototype for Studio OS. It remains local-first and can sync the complete Studio OS state plus private Project Brief files through Supabase.
 
 ## Technology Stack
 - **Markup:** HTML5
@@ -42,8 +42,10 @@ python -m SimpleHTTPServer 8000
 2. Apply `supabase/migrations/20261007000000_create_studio_classes_and_students.sql`.
 3. Apply `supabase/migrations/20261007163300_restrict_rls_auto_enable_execution.sql`.
 4. Apply `supabase/migrations/20261008000000_add_project_sync_and_brief_storage.sql`.
-5. Put the project URL and a publishable key in `supabase-config.js`. Never use a secret or service-role key in browser code.
-6. Configure the deployed URL and local development URL as allowed Auth redirect URLs in Supabase.
-7. Serve the directory over HTTP, sign in by email, and choose **Sync now**.
+5. Apply `supabase/migrations/20261011000000_add_full_state_snapshots.sql`.
+6. Put the project URL and a publishable key in `supabase-config.js`. Never use a secret or service-role key in browser code.
+7. Configure the deployed URL and local development URL as allowed Auth redirect URLs in Supabase.
+8. On the primary computer, export the newest standalone backup, restore it in the hosted app, sign in by email, and choose **Sync now**.
+9. On a second device, sign in and choose **Use cloud copy** when prompted.
 
-All data edits still go to `localStorage` first. Project Brief files require a signed-in Supabase session and are stored in a private bucket with per-user access policies. If Supabase is unavailable or not configured, the rest of the app continues to work locally. See `MIGRATION_PLAN.md` for scope and safety limits.
+All data edits still go to `localStorage` first. Full cloud snapshots are append-only and owner-scoped, so older cloud revisions remain recoverable. Project Brief files require a signed-in Supabase session and are stored in a private bucket with per-user access policies. If Supabase is unavailable or not configured, the app continues to work locally. See `MIGRATION_PLAN.md` for scope and safety limits.

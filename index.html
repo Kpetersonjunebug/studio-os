@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Studio OS V2.5 - Today</title>
-    <link rel="stylesheet" href="styles.css?v=20261008-class-evaluation-v5">
+    <link rel="stylesheet" href="styles.css?v=20261011-full-state-v1">
 </head>
 <body>
     <div class="app-shell">
@@ -30,12 +30,14 @@
                 <button class="rail-link" id="navSetup" type="button">Setup</button>
             </nav>
             <section class="cloud-sync-panel" aria-label="Studio OS cloud sync">
-                <div class="cloud-sync-heading">Classes + Students + Projects</div>
+                <div class="cloud-sync-heading">All Studio OS Data</div>
                 <div id="cloudSyncStatus" class="cloud-sync-status status-local">Local only — Supabase is not configured</div>
                 <input id="cloudSyncEmail" type="email" autocomplete="email" placeholder="Email for sync" disabled>
                 <div class="cloud-sync-actions">
                     <button id="cloudSyncSignInBtn" type="button" disabled>Sign in</button>
                     <button id="cloudSyncNowBtn" type="button" class="hidden">Sync now</button>
+                    <button id="cloudSyncUseCloudBtn" type="button" class="hidden">Use cloud copy</button>
+                    <button id="cloudSyncUseDeviceBtn" type="button" class="hidden">Upload this device</button>
                     <button id="cloudSyncSignOutBtn" type="button" class="hidden">Sign out</button>
                 </div>
             </section>
@@ -342,8 +344,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="supabase-config.js"></script>
-    <script src="supabase-sync.js?v=20261008-class-evaluation-v5"></script>
+    <script src="supabase-sync.js?v=20261011-full-state-v1"></script>
     <script src="data.js"></script>
-    <script src="app.js?v=20261008-homework-carry-forward-v6"></script>
+    <script src="app.js?v=20261011-full-state-v1"></script>
 </body>
 </html>

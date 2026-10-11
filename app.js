@@ -16,6 +16,7 @@ class StudioOSApp {
         this.cloudSync = null;
         this.cloudSyncTimer = null;
         this.cloudSyncBusy = false;
+        this.cloudConflict = null;
         this.init();
     }
 
@@ -59,23 +60,23 @@ class StudioOSApp {
     }
 
     cloudSyncMetaKey() {
-        return this.cloudSync?.user ? `studioOS_classes_students_projects_sync_v2_${this.cloudSync.user.id}` : "";
+        return this.cloudSync?.user ? `studioOS_full_state_sync_v1_${this.cloudSync.user.id}` : "";
     }
 
-    readCloudSyncFingerprint() {
+    readCloudSyncMeta() {
         const key = this.cloudSyncMetaKey();
-        if (!key) return "";
+        if (!key) return {};
         try {
-            return JSON.parse(localStorage.getItem(key) || "{}").fingerprint || "";
+            return JSON.parse(localStorage.getItem(key) || "{}");
         } catch (_) {
-            return "";
+            return {};
         }
     }
 
-    saveCloudSyncFingerprint(fingerprint) {
+    saveCloudSyncMeta(fingerprint, revision) {
         const key = this.cloudSyncMetaKey();
         if (!key) return;
-        localStorage.setItem(key, JSON.stringify({ fingerprint, syncedAt: new Date().toISOString() }));
+        localStorage.setItem(key, JSON.stringify({ fingerprint, revision, syncedAt: new Date().toISOString() }));
     }
 
     updateCloudSyncStatus(kind, message) {
@@ -93,13 +94,19 @@ class StudioOSApp {
         const emailInput = document.getElementById("cloudSyncEmail");
         const signInButton = document.getElementById("cloudSyncSignInBtn");
         const syncButton = document.getElementById("cloudSyncNowBtn");
+        const useCloudButton = document.getElementById("cloudSyncUseCloudBtn");
+        const useDeviceButton = document.getElementById("cloudSyncUseDeviceBtn");
         const signOutButton = document.getElementById("cloudSyncSignOutBtn");
-        if (!emailInput || !signInButton || !syncButton || !signOutButton) return;
+        if (!emailInput || !signInButton || !syncButton || !useCloudButton || !useDeviceButton || !signOutButton) return;
         emailInput.disabled = !configured || signedIn;
         signInButton.classList.toggle("hidden", signedIn);
         signInButton.disabled = !configured;
         syncButton.classList.toggle("hidden", !signedIn);
         syncButton.disabled = this.cloudSyncBusy;
+        useCloudButton.classList.toggle("hidden", !signedIn || !this.cloudConflict);
+        useDeviceButton.classList.toggle("hidden", !signedIn || !this.cloudConflict);
+        useCloudButton.disabled = this.cloudSyncBusy;
+        useDeviceButton.disabled = this.cloudSyncBusy;
         signOutButton.classList.toggle("hidden", !signedIn);
     }
 
@@ -113,7 +120,7 @@ class StudioOSApp {
         try {
             const user = await this.cloudSync.initialize();
             this.renderCloudSyncControls();
-            if (user) await this.syncClassesAndStudents(false);
+            if (user) await this.syncFullState("auto");
         } catch (err) {
             console.error("Studio OS cloud initialization failed; continuing locally.", err);
             this.updateCloudSyncStatus("error", "Cloud unavailable — working locally");
@@ -123,7 +130,7 @@ class StudioOSApp {
     scheduleCloudRosterSync() {
         if (!this.cloudSync?.user || this.cloudSyncBusy) return;
         window.clearTimeout(this.cloudSyncTimer);
-        this.cloudSyncTimer = window.setTimeout(() => this.syncClassesAndStudents(false), 900);
+        this.cloudSyncTimer = window.setTimeout(() => this.syncFullState("auto"), 900);
     }
 
     createCloudClassShell(id) {
@@ -161,64 +168,93 @@ class StudioOSApp {
         this.render();
     }
 
-    async syncClassesAndStudents(allowProjectBootstrap = false) {
-        if (!this.cloudSync?.user || this.cloudSyncBusy) return;
+    applyCloudFullState(remoteState) {
+        if (!this.isValidPilotState(remoteState)) throw new Error("The cloud copy is not a valid Studio OS state.");
+        this.saveBackupSnapshot(this.state, "pre-cloud-full-state-merge");
+        this.state = this.normalizeState(JSON.parse(JSON.stringify(remoteState)));
+        this.regenerateAllClassDates();
+        this.state.classes.forEach((cls) => this.syncClassRosterWithDates(cls));
+        this.reconcileLegacyFollowUps();
+        this.selectedStudentByClassDate = {};
+        this.ensureSelectedStudent(true);
+        this.saveState(false, false);
+        this.render();
+    }
+
+    async syncFullState(mode = "auto") {
+        if (!this.cloudSync?.user || this.cloudSyncBusy) return false;
         this.cloudSyncBusy = true;
-        this.updateCloudSyncStatus("syncing", "Syncing Classes, Students + Projects…");
+        this.updateCloudSyncStatus("syncing", "Syncing all Studio OS data…");
         try {
-            const localSnapshot = window.StudioOSCloudSync.buildSnapshot(this.state);
-            const remoteSnapshot = await this.cloudSync.fetchSnapshot();
-            const localFingerprint = window.StudioOSCloudSync.canonicalSnapshot(localSnapshot);
-            const remoteFingerprint = window.StudioOSCloudSync.canonicalSnapshot(remoteSnapshot);
-            const lastFingerprint = this.readCloudSyncFingerprint();
+            const localFingerprint = await window.StudioOSCloudSync.fingerprintFullState(this.state);
+            const remote = await this.cloudSync.fetchFullState();
 
-            const remoteProjectsInitialized = remoteSnapshot.some((cls) => Number(cls.projectSyncVersion) >= 1);
-            if (remoteSnapshot.length === 0) {
-                await this.cloudSync.pushSnapshot(localSnapshot);
-                this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
-                return true;
-            }
-
-            if (!remoteProjectsInitialized) {
-                const bootstrapSnapshot = window.StudioOSCloudSync.buildProjectBootstrapSnapshot(localSnapshot, remoteSnapshot);
-                if (!allowProjectBootstrap) {
-                    this.applyCloudRosterSnapshot(bootstrapSnapshot);
-                    this.updateCloudSyncStatus("ready", "Projects not online yet — use Sync now on your primary computer");
+            if (!remote) {
+                this.cloudConflict = null;
+                if (mode !== "manual" && mode !== "use-local") {
+                    this.updateCloudSyncStatus("ready", "Cloud is ready — restore the latest backup here, then use Sync now on the primary computer");
                     return true;
                 }
-                await this.cloudSync.pushSnapshot(bootstrapSnapshot);
-                this.applyCloudRosterSnapshot(bootstrapSnapshot);
-                this.saveCloudSyncFingerprint(window.StudioOSCloudSync.canonicalSnapshot(bootstrapSnapshot));
-                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                const saved = await this.cloudSync.appendFullState(this.state, 0, localFingerprint);
+                this.saveCloudSyncMeta(saved.contentHash, saved.revision);
+                this.updateCloudSyncStatus("synced", "All Studio OS data synced");
                 return true;
             }
 
-            if (!lastFingerprint || localFingerprint === lastFingerprint) {
-                this.applyCloudRosterSnapshot(remoteSnapshot);
-                this.saveCloudSyncFingerprint(remoteFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+            const remoteFingerprint = remote.contentHash || await window.StudioOSCloudSync.fingerprintFullState(remote.state);
+            const last = this.readCloudSyncMeta();
+
+            if (mode === "use-cloud") {
+                this.applyCloudFullState(remote.state);
+                this.saveCloudSyncMeta(remoteFingerprint, remote.revision);
+                this.cloudConflict = null;
+                this.updateCloudSyncStatus("synced", "Cloud copy loaded on this device");
                 return true;
             }
 
-            if (remoteFingerprint === lastFingerprint) {
-                await this.cloudSync.pushSnapshot(localSnapshot);
-                this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+            if (mode === "use-local") {
+                const saved = await this.cloudSync.appendFullState(this.state, remote.revision, localFingerprint);
+                this.saveCloudSyncMeta(saved.contentHash, saved.revision);
+                this.cloudConflict = null;
+                this.updateCloudSyncStatus("synced", "This device is now the current cloud copy");
                 return true;
             }
 
             if (localFingerprint === remoteFingerprint) {
-                this.saveCloudSyncFingerprint(localFingerprint);
-                this.updateCloudSyncStatus("synced", "Classes, Students + Projects synced");
+                this.saveCloudSyncMeta(remoteFingerprint, remote.revision);
+                this.cloudConflict = null;
+                this.updateCloudSyncStatus("synced", "All Studio OS data synced");
                 return true;
             }
 
-            this.updateCloudSyncStatus("conflict", "Sync paused — cloud data changed on two devices");
+            if (!last.fingerprint) {
+                this.cloudConflict = remote;
+                this.updateCloudSyncStatus("conflict", "Cloud data found — choose the cloud copy or this device");
+                return false;
+            }
+
+            if (localFingerprint === last.fingerprint) {
+                this.applyCloudFullState(remote.state);
+                this.saveCloudSyncMeta(remoteFingerprint, remote.revision);
+                this.cloudConflict = null;
+                this.updateCloudSyncStatus("synced", "New cloud changes loaded");
+                return true;
+            }
+
+            if (remoteFingerprint === last.fingerprint && Number(remote.revision) === Number(last.revision)) {
+                const saved = await this.cloudSync.appendFullState(this.state, remote.revision, localFingerprint);
+                this.saveCloudSyncMeta(saved.contentHash, saved.revision);
+                this.cloudConflict = null;
+                this.updateCloudSyncStatus("synced", "All Studio OS data synced");
+                return true;
+            }
+
+            this.cloudConflict = remote;
+            this.updateCloudSyncStatus("conflict", "Two devices changed — choose which copy should be current");
             return false;
         } catch (err) {
-            console.error("Studio OS cloud sync failed; local data is still saved.", err);
-            this.updateCloudSyncStatus("error", "Cloud sync failed — local data is safe");
+            console.error("Studio OS full-state sync failed; local data is still saved.", err);
+            this.updateCloudSyncStatus("error", err.message || "Cloud sync failed — local data is safe");
             return false;
         } finally {
             this.cloudSyncBusy = false;
@@ -1098,7 +1134,9 @@ class StudioOSApp {
                 this.updateCloudSyncStatus("error", "Could not send sign-in link");
             }
         });
-        document.getElementById("cloudSyncNowBtn").addEventListener("click", () => this.syncClassesAndStudents(true));
+        document.getElementById("cloudSyncNowBtn").addEventListener("click", () => this.syncFullState("manual"));
+        document.getElementById("cloudSyncUseCloudBtn").addEventListener("click", () => this.syncFullState("use-cloud"));
+        document.getElementById("cloudSyncUseDeviceBtn").addEventListener("click", () => this.syncFullState("use-local"));
         document.getElementById("cloudSyncSignOutBtn").addEventListener("click", async () => {
             if (!this.cloudSync) return;
             try {

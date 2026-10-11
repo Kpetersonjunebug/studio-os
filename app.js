@@ -229,7 +229,7 @@ class StudioOSApp {
 
             if (!last.fingerprint) {
                 this.cloudConflict = remote;
-                this.updateCloudSyncStatus("conflict", "Cloud data found — choose the cloud copy or this device");
+                this.updateCloudSyncStatus("conflict", "Cloud copy ready — tap Use cloud copy below");
                 return false;
             }
 
